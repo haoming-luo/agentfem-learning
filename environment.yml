@@ -4,6 +4,10 @@ channels:
 dependencies:
   - python=3.11
   - fenics-dolfinx
+  - mpich
+  - mpi4py
+  - petsc4py
+  - h5py
   - numpy
   - pytorch
   - pip
