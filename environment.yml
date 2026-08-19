@@ -1,0 +1,14 @@
+name: agentfem-learning-dev
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - fenics-dolfinx
+  - numpy
+  - pytorch
+  - pip
+  - pip:
+      - build
+      - pytest>=8
+      - ruff>=0.16,<0.17
+      - twine

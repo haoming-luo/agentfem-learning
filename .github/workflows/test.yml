@@ -1,0 +1,51 @@
+name: Test
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  xdem-reference:
+    runs-on: ubuntu-latest
+    env:
+      UCX_TLS: tcp,sm,self
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - name: Check out AgentFEM-Learning
+        uses: actions/checkout@v6
+
+      - name: Create scientific Python environment
+        uses: conda-incubator/setup-miniconda@v4
+        with:
+          activate-environment: agentfem-learning-dev
+          environment-file: environment.yml
+          miniforge-version: latest
+          use-mamba: true
+          channels: conda-forge
+          channel-priority: strict
+
+      - name: Install current AgentFEM contract and companion
+        run: |
+          git clone --depth 1 https://github.com/haoming-luo/agentfem.git ../agentfem
+          python -m pip install --no-deps -e ../agentfem
+          python -m pip install --no-deps -e .
+
+      - name: Check source and package
+        run: |
+          python -m ruff check src tests examples --no-cache
+          python -m build
+          python -m twine check dist/*
+
+      - name: Run provider and evidence tests
+        run: python -m pytest
+
+      - name: Run installed extension reference
+        run: python examples/mode_iii_tip/case.py --output /tmp/agentfem-learning-reference

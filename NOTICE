@@ -1,0 +1,7 @@
+AgentFEM-Learning
+Copyright 2026 Haoming Luo
+
+This product is an optional companion to AgentFEM and includes an independent
+reference implementation informed by publicly described scientific methods.
+Upstream method attribution is retained in CITATION.cff and the provider
+documentation.

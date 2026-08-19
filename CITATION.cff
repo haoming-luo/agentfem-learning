@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: "If you use AgentFEM-Learning, cite AgentFEM and each underlying method used."
+title: "AgentFEM-Learning: scientific-learning providers for AgentFEM"
+type: software
+authors:
+  - family-names: Luo
+    given-names: Haoming
+version: 0.1.0a1
+license: Apache-2.0
+repository-code: "https://github.com/haoming-luo/agentfem-learning"
+references:
+  - type: software
+    title: "AgentFEM"
+    repository-code: "https://github.com/haoming-luo/agentfem"
+  - type: software
+    title: "XDEM: Extended Deep Energy Method"
+    repository-code: "https://github.com/yizheng-wang/XDEM"
+  - type: article
+    title: "Towards Unified AI-Driven Fracture Mechanics: The Extended Deep Energy Method (XDEM)"
+    authors:
+      - family-names: Wang
+        given-names: Yizheng
+    year: 2025
+    identifiers:
+      - type: other
+        value: "arXiv:2511.05888"
