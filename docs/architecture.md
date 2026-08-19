@@ -1,5 +1,10 @@
 # Provider architecture
 
+AgentFEM-Learning is one broad companion distribution. XDEM, future DeepXDE
+bindings, neural operators, and learned constitutive models remain explicit
+subdomains inside it; they do not become separate official repositories merely
+because their algorithms differ.
+
 ## Ownership
 
 | Layer | Owner |
@@ -16,6 +21,13 @@ surrogate nor a finite-element assembly backend.
 The broader distribution shares packaging, extension compatibility, examples,
 and result evidence. It does not erase the distinction between neural-field
 optimization and future neural-operator training.
+
+The boundary is intentionally asymmetric: AgentFEM core defines the stable
+scientific request and result contracts, while this package may evolve with
+replaceable frameworks. A user-owned callable can bypass this package entirely
+and still enter the same Step and `SimulationResult` lifecycle. Provider code
+therefore must not add scientific meanings that are invisible to the core
+contract.
 
 ## First capability
 

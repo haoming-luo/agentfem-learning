@@ -7,6 +7,15 @@ companion provides batteries-included providers, reference implementations,
 examples, and benchmark evidence without moving PyTorch or method-specific
 architectures into the finite-element core.
 
+This is the single official learning companion. Individual methods such as
+XDEM are subdomains, not separate top-level projects:
+
+```text
+AgentFEM core      scientific contracts, execution lifecycle, results
+AgentFEM-Learning maintained method providers, examples, benchmark evidence
+user packages      laboratory-owned or private models using the same contract
+```
+
 The first provider is `neural_fields.xdem`, proving one complete workflow:
 
 ```text
@@ -70,8 +79,14 @@ shares the environment's OpenMP runtime:
 ```bash
 mamba install -n fenicsx-env -c conda-forge pytorch
 conda activate fenicsx-env
+python -m pip install -e ../agentfem
 python -m pip install -e '.[xdem]' --no-deps
 ```
+
+Run these commands from this repository root with the AgentFEM source tree in
+the sibling `../agentfem` directory. The temporary `--no-deps` is needed only
+until AgentFEM 0.2.2 is published; it prevents pip from searching PyPI for that
+unreleased core version.
 
 Do not use `KMP_DUPLICATE_LIB_OK` to conceal duplicate OpenMP runtimes. On
 Apple Silicon the conda-forge build also exposes the PyTorch MPS device. The

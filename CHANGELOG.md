@@ -11,3 +11,5 @@
   tests.
 - Establish `agentfem-learning` as the broad companion distribution and place
   the first provider under the explicit `neural_fields.xdem` subdomain.
+- Retire the standalone local `agentfem-xdem` project identity; XDEM now lives
+  only as a provider subdomain of AgentFEM-Learning.
