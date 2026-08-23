@@ -99,6 +99,18 @@ reference case defaults to reproducible CPU `float64`; use
 python examples/mode_iii_tip/case.py --output outputs/mode_iii_tip
 ```
 
+The installed-package acceptance gate consumes that ordinary result rather
+than running a private test path:
+
+```bash
+python acceptance_gate.py outputs/mode_iii_tip/result.json \
+  --report outputs/extension-acceptance.json
+```
+
+It proves that an installed extension was discovered through the public entry
+point, added one provider without modifying AgentFEM core, and returned an
+integrity-checked `SimulationResult`.
+
 The user-facing model remains short:
 
 ```python

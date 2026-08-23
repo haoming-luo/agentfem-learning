@@ -32,20 +32,40 @@ jobs:
           channels: conda-forge
           channel-priority: strict
 
-      - name: Install current AgentFEM contract and companion
+      - name: Build immutable core and companion wheels
         run: |
           git clone --depth 1 https://github.com/haoming-luo/agentfem.git ../agentfem
-          python -m pip install --no-deps -e ../agentfem
-          python -m pip install --no-deps -e .
+          python -m build --wheel --outdir /tmp/agentfem-core-dist ../agentfem
+          python -m build --wheel --outdir /tmp/agentfem-learning-dist .
+
+      - name: Install the exact wheels under test
+        run: |
+          python -m pip install --no-deps --force-reinstall /tmp/agentfem-core-dist/*.whl
+          python -m pip install --no-deps --force-reinstall /tmp/agentfem-learning-dist/*.whl
 
       - name: Check source and package
         run: |
           python -m ruff check src tests examples --no-cache
-          python -m build
+          python -m build --sdist
           python -m twine check dist/*
 
       - name: Run provider and evidence tests
         run: python -m pytest
 
-      - name: Run installed extension reference
-        run: python examples/mode_iii_tip/case.py --output /tmp/agentfem-learning-reference
+      - name: Verify installed discovery and reference outside both repositories
+        run: |
+          cd /tmp
+          python -m agentfem.cli extensions --json
+          python "$GITHUB_WORKSPACE/examples/mode_iii_tip/case.py" --output /tmp/agentfem-learning-reference
+          python -m agentfem.cli extensions --load agentfem-learning.xdem --json
+          python "$GITHUB_WORKSPACE/acceptance_gate.py" \
+            /tmp/agentfem-learning-reference/result.json \
+            --report /tmp/agentfem-extension-acceptance.json
+
+      - name: Upload extension acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: agentfem-extension-acceptance
+          path: /tmp/agentfem-extension-acceptance.json
+          if-no-files-found: warn
