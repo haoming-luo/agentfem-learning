@@ -60,6 +60,10 @@ jobs:
           python -m agentfem.cli extensions --load agentfem-learning.xdem --json
           python "$GITHUB_WORKSPACE/acceptance_gate.py" \
             /tmp/agentfem-learning-reference/result.json \
+            --core-wheel /tmp/agentfem-core-dist/*.whl \
+            --extension-wheel /tmp/agentfem-learning-dist/*.whl \
+            --core-commit "$(git -C "$GITHUB_WORKSPACE/../agentfem" rev-parse HEAD)" \
+            --companion-commit "$GITHUB_SHA" \
             --report /tmp/agentfem-extension-acceptance.json
 
       - name: Upload extension acceptance evidence
