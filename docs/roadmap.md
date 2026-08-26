@@ -28,14 +28,19 @@ core `model.step(target=spec, executor=...)` boundary.
   integration, and ring-resolved SIF/J now run through one AgentFEM Step. The
   common interaction integral is checked
   first against exact fields and an ordinary P2 FEM center crack. Remaining
-  promotion work is a general finite-domain displacement/traction boundary
-  adapter and an external published vector benchmark; the slit-annulus
-  manufactured reference remains `experimental_reference` until then.
-- **Milestone B -- static multi-crack fields:** support mutually separated
-  straight cracks, stable per-tip identities, geometry-aware integration
-  radii, independent SIF reports, and one public two-crack benchmark. Reject
-  intersecting, touching, curved, and boundary-terminating geometries until a
-  separately verified provider supports them.
+  finite-domain displacement/traction adapter now executes through a separate
+  `experimental_solver` provider. An external published finite-domain vector
+  benchmark remains the promotion gate; the slit-annulus manufactured
+  reference remains `experimental_reference` rather than being relabelled.
+- **Milestone B -- static multi-crack fields (experimental solver
+  implemented):** mutually separated internal straight cracks now enter one
+  joint energy solve. Crack and tip identities are stable, integration radii
+  are limited by other cracks and domain boundaries, and every tip returns an
+  independent ring-resolved SIF/J report. A manufactured disjoint-neighborhood
+  test verifies the extractor. The remaining promotion gate is a public
+  interacting two-crack benchmark in which every active tip satisfies the
+  declared path-variation tolerance. Intersecting, touching, curved, and
+  boundary-terminating geometries continue to fail closed.
 - **Milestone C -- research production:** reuse AgentFEM Campaign for seeds and
   parameters; add checkpoint/best state, explicit warm start with cold-start
   fallback, multi-axis convergence, and ParaView output with duplicated
@@ -64,6 +69,11 @@ A provider moves from `experimental_reference` only after it has a readable
 case, deterministic small regression, independent scientific check, held-out
 or external benchmark, dependency compatibility range, unsupported-case
 declaration, and wheel-installed end-to-end test.
+
+For the finite-domain provider, "runs" is deliberately not synonymous with
+"validated". Boundary residual, independent integration, and optimization may
+pass while one or more SIF rings remain uncertain. That result is useful
+diagnostic evidence, not a benchmark pass.
 
 Official references:
 

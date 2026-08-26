@@ -27,10 +27,12 @@ The XDEM providers are experimental. The packaging regression is a normalized
 Williams Mode-III field. The first vector-elastic reference adds plane stress,
 plane strain, Mode I/II mixtures, arbitrary crack-tip translation and
 orientation, two-sided displacement output, and common ring-resolved SIF/J
-evidence on the same slit annulus. These references verify
-the provider and scientific-evidence boundaries; they do not claim general
-geometry, multiple cracks, crack growth, phase-field fracture, or experimental
-validation.
+evidence on the same slit annulus. An experimental finite-domain XDEM-D
+provider additionally accepts rectangular domains, constant displacement and
+traction boundaries, and multiple separated internal straight cracks in one
+joint solve with a report for every crack tip. These capabilities do not claim
+curved or intersecting cracks, crack growth, phase-field fracture, or external
+multi-crack validation.
 
 ## What the first reference proves
 
@@ -142,6 +144,36 @@ result = model.step(
 Its result contains `U` and `S` field records, paired crack-face traces, and a
 `stress_intensity.json` artifact generated through AgentFEM's common LEFM
 interaction-integral contract.
+
+The finite-domain public language remains problem-oriented:
+
+```python
+from agentfem import fracture
+from agentfem_learning.neural_fields import xdem
+
+cracks = fracture.crack_set(
+    fracture.segment("lower", start=(-1.0, -0.5), end=(1.0, -0.5)),
+    fracture.segment("upper", start=(-1.0, 0.5), end=(1.0, 0.5)),
+)
+problem = xdem.static_crack_problem(
+    domain=xdem.rectangular_domain((-3.0, 3.0, -2.0, 2.0)),
+    material=material,
+    cracks=cracks,
+    conditions=(
+        xdem.displacement_bc("fixed_bottom", "bottom", (0.0, 0.0)),
+        xdem.traction_bc("pull_top", "top", (0.0, 1.0e6)),
+    ),
+)
+result = model.step(
+    target=xdem.finite_domain_spec(problem),
+    output="outputs/two_cracks",
+).solve_result()
+```
+
+The result keeps four stable tip identities and four independent
+`K_I/K_II/J` ring reports. `experimental_solver` means that the workflow is
+executable; it is not promoted to an externally validated interacting-crack
+solver until the public benchmark gate in the roadmap passes.
 
 The user-facing model remains short:
 

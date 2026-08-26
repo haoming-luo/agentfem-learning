@@ -8,3 +8,6 @@ def test_extension_identity_and_capabilities_are_explicit():
     assert "fracture.williams_mode_iii_reference" in extension.spec.capabilities
     assert "fracture.williams_vector_reference" in extension.spec.capabilities
     assert "fracture.stress_intensity_extraction" in extension.spec.capabilities
+    assert "fracture.xdem_d.finite_domain" in extension.spec.capabilities
+    assert "fracture.xdem_d.multiple_cracks" in extension.spec.capabilities
+    assert "fracture.xdem_d.per_tip_sif" in extension.spec.capabilities

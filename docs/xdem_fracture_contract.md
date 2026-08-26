@@ -26,7 +26,7 @@ coefficients, plots, and conclusions.
 
 ## Geometry boundary
 
-The first executable geometry family will be mutually non-intersecting straight
+The first executable geometry family is mutually non-intersecting straight
 cracks in a homogeneous two-dimensional linear-elastic domain. Curved,
 intersecting, branching, boundary-terminating, growing, or three-dimensional
 cracks are not silently approximated. They receive an addressable unsupported-
@@ -63,7 +63,9 @@ datasets; it must not average the two traces into one continuous nodal field.
 3. one inclined mixed-mode geometry benchmark (implemented for arbitrary tip
    translation and orientation on the manufactured slit annulus; external
    finite-domain geometry remains a promotion gate);
-4. multiple separated straight cracks with stable per-tip reports;
+4. multiple separated straight cracks with stable per-tip reports
+   (implemented as an experimental joint solver; external interacting-crack
+   validation remains);
 5. Campaign, seed ensemble, checkpoint, warm start, and multi-axis convergence.
 
 Crack growth, XDEM-C phase fields, fatigue, inverse identification, and neural-

@@ -74,17 +74,34 @@ solver-neutral interaction integral. Therefore the analytical field, ordinary
 FEM benchmark, and neural field use the same (K_I/K_{II}/J) conventions and
 path-sensitivity report rather than three provider-specific postprocessors.
 
+The finite-domain provider adds one scientific layer without changing that
+ownership. `StaticXDEMProblem2D` contains a rectangle, material, constant
+vector displacement/traction boundaries, and a core `CrackSet2D`. A
+conservative rigid-body-rank audit rejects underconstrained problems before
+training. One segment-confined jump feature is added per crack and leading
+branch features per tip; all cracks are optimized in one displacement field.
+The result then re-enters the provider-neutral `FractureField2D` protocol, so
+each tip is postprocessed through the same interaction integral used by FEM.
+
+This provider currently supports separated internal straight cracks only. Its
+finite-domain solve and per-tip report pipeline execute, but the maturity is
+`experimental_solver` until public single- and interacting-crack benchmarks
+close the external evidence loop. A per-tip `uncertain` path status is retained
+in the result rather than hidden by averaging all tips.
+
 ## Promotion route
 
 1. Keep the Williams field as the packaging, discontinuity, integration, and
    provider regression.
 2. Implement the interaction/domain-integral adapter first against analytical
    and ordinary FEM fields, independently of neural optimization.
-3. Retain the implemented inclined mixed-mode manufactured benchmark, then add
-   one external finite-domain Mode-I benchmark. Review upstream licensing
-   before reusing code; keep an independent implementation possible.
-4. Add multiple non-intersecting straight cracks only after per-tip SIF and
-   unsupported-geometry failures are stable.
+3. Retain the implemented inclined mixed-mode manufactured benchmark and the
+   executable finite-domain adapter, then add one external finite-domain Mode-I
+   benchmark. Review upstream licensing before reusing code; keep an
+   independent implementation possible.
+4. Promote the implemented multi-crack joint solver only after a public
+   interacting-crack benchmark, per-tip SIF convergence, and unsupported-
+   geometry failures are stable.
 5. Add phase-field energy and irreversibility only after AgentFEM's common
    phase-field contract exists.
 6. Add crack growth only with path, energy, sampling, and repeatability
