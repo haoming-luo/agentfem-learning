@@ -19,7 +19,7 @@ classifiers = [
   "Topic :: Scientific/Engineering",
 ]
 dependencies = [
-  "agentfem>=0.2.2",
+  "agentfem>=0.2.6",
   "numpy>=1.26",
 ]
 

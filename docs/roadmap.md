@@ -22,11 +22,14 @@ core `model.step(target=spec, executor=...)` boundary.
 
 ### Neural fields
 
-- **Milestone A -- single-crack vector elasticity:** implement plane stress and
-  plane strain, displacement/traction conditions, jump and optional Williams
-  enrichment, and Mode-I/mixed-mode public benchmarks. Build the SIF/J
-  interaction-integral adapter against analytical and FEM fields before using
-  XDEM output as its input.
+- **Milestone A -- single-crack vector elasticity (foundation implemented):**
+  plane stress/strain, Mode-I/II mixtures, a physical jump, differentiable
+  Williams enrichment, independent energy integration, and ring-resolved SIF/J
+  now run through one AgentFEM Step. The common interaction integral is checked
+  first against exact fields and an ordinary P2 FEM center crack. Remaining
+  promotion work is a general finite-domain displacement/traction boundary
+  adapter and an external published vector benchmark; the slit-annulus
+  manufactured reference remains `experimental_reference` until then.
 - **Milestone B -- static multi-crack fields:** support mutually separated
   straight cracks, stable per-tip identities, geometry-aware integration
   radii, independent SIF reports, and one public two-crack benchmark. Reject

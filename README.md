@@ -16,17 +16,20 @@ AgentFEM-Learning maintained method providers, examples, benchmark evidence
 user packages      laboratory-owned or private models using the same contract
 ```
 
-The first provider is `neural_fields.xdem`, proving one complete workflow:
+The first provider family is `neural_fields.xdem`, proving one complete workflow:
 
 ```text
 NeuralFieldSpec -> AgentFEM Step Provider -> PyTorch energy optimization
                 -> SimulationResult -> field artifact + verification evidence
 ```
 
-The XDEM provider is experimental. Its first executable problem is a normalized
-Williams Mode-III crack-tip field on a slit annulus. It is deliberately small:
-the purpose is to verify the provider boundary, not to claim general XDEM,
-crack growth, phase-field fracture, or experimental validation.
+The XDEM providers are experimental. The packaging regression is a normalized
+Williams Mode-III field. The first vector-elastic reference adds plane stress,
+plane strain, Mode I/II mixtures, two-sided displacement output, and common
+ring-resolved SIF/J evidence on the same slit annulus. These references verify
+the provider and scientific-evidence boundaries; they do not claim general
+geometry, multiple cracks, crack growth, phase-field fracture, or experimental
+validation.
 
 ## What the first reference proves
 
@@ -40,10 +43,11 @@ crack growth, phase-field fracture, or experimental validation.
 - the crack jump exists only on the declared branch cut—feature engineering is
   not allowed to introduce autograd-invisible internal discontinuities.
 
-The accepted reference checks cover the displacement field, prescribed
-boundaries, strain energy, crack opening jump, crack-face traction, and
-independent integration consistency. The field artifact preserves paired
-one-sided crack-face samples instead of averaging the discontinuity away.
+The accepted reference checks cover displacement, prescribed boundaries,
+strain energy, crack opening jump, independent integration consistency, and,
+for vector elasticity, (K_I), (K_{II}), (J), and extraction-domain
+variation. The field artifact preserves paired one-sided crack-face samples
+instead of averaging the discontinuity away.
 
 ## Why a companion project
 
@@ -72,10 +76,10 @@ boundary is specified in the
 
 ## Installation during development
 
-The companion targets the next AgentFEM release containing
-`agentfem.learning.NeuralFieldSpec` (`agentfem>=0.2.2`). Until that release is
-published, keep `agentfem` and `agentfem-learning` as sibling repositories and use
-the current AgentFEM source tree for development.
+The vector provider targets the next AgentFEM release containing the common
+LEFM interaction-integral contract (`agentfem>=0.2.6`). Until that release is
+published, keep `agentfem` and `agentfem-learning` as sibling repositories and
+use the current AgentFEM source tree for development.
 
 For a conda-forge FEniCSx environment, install PyTorch from conda-forge so it
 shares the environment's OpenMP runtime:
@@ -88,19 +92,19 @@ python -m pip install -e '.[xdem]' --no-deps
 ```
 
 Run these commands from this repository root with the AgentFEM source tree in
-the sibling `../agentfem` directory. The temporary `--no-deps` is needed only
-until AgentFEM 0.2.2 is published; it prevents pip from searching PyPI for that
-unreleased core version.
+the sibling `../agentfem` directory. The temporary `--no-deps` prevents pip
+from searching PyPI for the not-yet-released core compatibility floor.
 
 Do not use `KMP_DUPLICATE_LIB_OK` to conceal duplicate OpenMP runtimes. On
 Apple Silicon the conda-forge build also exposes the PyTorch MPS device. The
 reference case defaults to reproducible CPU `float64`; use
 `--device mps --dtype float32` when faster exploratory training is preferred.
 
-## Run the reference case
+## Run the reference cases
 
 ```bash
 python examples/mode_iii_tip/case.py --output outputs/mode_iii_tip
+python examples/vector_mixed_mode_tip/case.py
 ```
 
 The installed-package acceptance gate consumes that ordinary result rather
@@ -112,8 +116,28 @@ python acceptance_gate.py outputs/mode_iii_tip/result.json \
 ```
 
 It proves that an installed extension was discovered through the public entry
-point, added one provider without modifying AgentFEM core, and returned an
+point, added its declared providers without modifying AgentFEM core, and returned an
 integrity-checked `SimulationResult`.
+
+The vector-elastic model is equally short:
+
+```python
+from agentfem_learning.neural_fields.xdem import vector_tip_spec
+
+result = model.step(
+    target=vector_tip_spec(
+        assumption="plane_stress",
+        k_i=1.0,
+        k_ii=0.5,
+    ),
+    epochs=500,
+    output="outputs/vector_mixed_mode_tip",
+).solve_result()
+```
+
+Its result contains `U` and `S` field records, paired crack-face traces, and a
+`stress_intensity.json` artifact generated through AgentFEM's common LEFM
+interaction-integral contract.
 
 The user-facing model remains short:
 
@@ -155,8 +179,8 @@ discovery, result evidence, and the human/agent workflow. This companion's
 XDEM subdomain owns PyTorch training and XDEM-style representations. The public
 XDEM research repository is not copied or vendored into this package.
 
-A later provider may bind reviewed upstream implementations for discrete
-fracture, phase-field fracture, SIF extraction, and crack propagation. Each
+A later provider may bind reviewed upstream implementations for general-domain
+discrete fracture, phase-field fracture, and crack propagation. Each
 capability must receive its own benchmark and maturity label before being
 advertised.
 

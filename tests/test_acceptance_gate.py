@@ -33,6 +33,10 @@ def test_extension_acceptance_consumes_common_result_contract(
     assert report["core_modified"] is False
     assert report["simulation_result"] == "passed"
     assert report["artifact_integrity"] is True
+    assert report["providers"] == (
+        "xdem_reference_neural_field",
+        "xdem_vector_lefm_neural_field",
+    )
 
     core = tmp_path / "agentfem.whl"
     companion = tmp_path / "agentfem_learning.whl"

@@ -30,7 +30,7 @@ and still enter the same Step and `SimulationResult` lifecycle. Provider code
 therefore must not add scientific meanings that are invisible to the core
 contract.
 
-## First capability
+## First capabilities
 
 The reference field is
 
@@ -63,6 +63,14 @@ separate `IntegrationRule` records. Their objective values are compared in one
 The branch cut is a core `CrackSet2D` asset with stable crack and tip IDs. The
 NPZ field contains paired one-sided trace coordinates and side labels, so its
 physical jump is not erased by continuous visualization interpolation.
+
+The vector reference uses the same provider lifecycle for two displacement
+components. Plane-stress or plane-strain energy is differentiated by PyTorch;
+Mode-I and Mode-II Williams bases carry the declared crack jump. Autograd
+stress and displacement-gradient samples then enter AgentFEM core's
+solver-neutral interaction integral. Therefore the analytical field, ordinary
+FEM benchmark, and neural field use the same (K_I/K_{II}/J) conventions and
+path-sensitivity report rather than three provider-specific postprocessors.
 
 ## Promotion route
 

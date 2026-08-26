@@ -75,7 +75,10 @@ def evaluate(
     extensions.load_extension(EXTENSION)
     after = {item.name for item in step_providers()}
 
-    expected_provider = "xdem_reference_neural_field"
+    expected_providers = {
+        "xdem_reference_neural_field",
+        "xdem_vector_lefm_neural_field",
+    }
     installed = {}
     installed_ok = True
     for distribution_name in ("agentfem", "agentfem-learning"):
@@ -102,10 +105,18 @@ def evaluate(
         gaps.append("exact core and companion wheel candidates must be retained")
     if require_installed_wheels and (not core_commit or not companion_commit):
         gaps.append("core and companion source commits must be recorded")
-    if expected_provider not in after:
-        gaps.append("extension did not register its declared Step provider")
-    if after - before != {expected_provider} and expected_provider not in before:
-        gaps.append("extension registration changed an unexpected provider set")
+    missing_providers = expected_providers - after
+    if missing_providers:
+        gaps.append(
+            "extension did not register its declared Step providers: "
+            f"{tuple(sorted(missing_providers))}"
+        )
+    unexpected = (after - before) - expected_providers
+    if unexpected:
+        gaps.append(
+            "extension registration changed an unexpected provider set: "
+            f"{tuple(sorted(unexpected))}"
+        )
     if manifest.get("metadata", {}).get("provider") != EXTENSION:
         gaps.append("result manifest does not identify the installed extension")
     if manifest.get("trust_level") != "verified":
@@ -113,6 +124,12 @@ def evaluate(
     if not verification.verified:
         gaps.append("result manifest or its artifacts fail integrity verification")
 
+    method = manifest.get("metadata", {}).get("method")
+    selected_provider = (
+        "xdem_vector_lefm_neural_field"
+        if method == "extended_deep_energy_vector_reference"
+        else "xdem_reference_neural_field"
+    )
     passed = not gaps
     return {
         "schema": "agentfem.extension-acceptance",
@@ -150,7 +167,8 @@ def evaluate(
             )
             else None
         ),
-        "provider": expected_provider,
+        "provider": selected_provider,
+        "providers": tuple(sorted(expected_providers)),
         "result_manifest": str(manifest_path),
         "result_trust_level": manifest.get("trust_level"),
         "artifact_integrity": verification.verified,

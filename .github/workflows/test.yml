@@ -57,6 +57,7 @@ jobs:
           cd /tmp
           python -m agentfem.cli extensions --json
           python "$GITHUB_WORKSPACE/examples/mode_iii_tip/case.py" --output /tmp/agentfem-learning-reference
+          python "$GITHUB_WORKSPACE/examples/vector_mixed_mode_tip/case.py"
           python -m agentfem.cli extensions --load agentfem-learning.xdem --json
           python "$GITHUB_WORKSPACE/acceptance_gate.py" \
             /tmp/agentfem-learning-reference/result.json \

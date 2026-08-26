@@ -56,9 +56,12 @@ datasets; it must not average the two traces into one continuous nodal field.
 
 ## Promotion sequence
 
-1. analytical and FEM verification of an interaction/domain integral;
-2. one centered Mode-I vector-elastic XDEM benchmark;
-3. one inclined mixed-mode benchmark;
+1. analytical and FEM verification of an interaction/domain integral
+   (implemented);
+2. one Mode-I vector-elastic manufactured XDEM benchmark (implemented on the
+   slit annulus; external finite-domain promotion remains);
+3. one inclined mixed-mode geometry benchmark (the current mixed-mode
+   manufactured field verifies physics and signs, not inclined meshing);
 4. multiple separated straight cracks with stable per-tip reports;
 5. Campaign, seed ensemble, checkpoint, warm start, and multi-axis convergence.
 

@@ -3,10 +3,12 @@
 from agentfem import extensions
 
 from .provider import XDEM_REFERENCE_PROVIDER
+from .vector_provider import XDEM_VECTOR_PROVIDER
 
 
 def _register(context: extensions.ExtensionContext) -> None:
     context.add_step_provider(XDEM_REFERENCE_PROVIDER)
+    context.add_step_provider(XDEM_VECTOR_PROVIDER)
 
 
 extension = extensions.Extension(
@@ -17,6 +19,8 @@ extension = extensions.Extension(
         capabilities=(
             "learning.neural_field.energy",
             "fracture.williams_mode_iii_reference",
+            "fracture.williams_vector_reference",
+            "fracture.stress_intensity_extraction",
             "results.simulation_result",
         ),
     ),

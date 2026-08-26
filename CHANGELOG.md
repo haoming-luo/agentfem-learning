@@ -15,3 +15,9 @@
   only as a provider subdomain of AgentFEM-Learning.
 - Make the clean-room CI environment explicit about AgentFEM's HDF5, MPI, and
   PETSc runtime dependencies while keeping them in one conda-forge stack.
+- Add plane-stress and plane-strain vector Williams neural fields with mixed
+  Mode-I/II enrichment and paired crack-face output.
+- Feed autograd displacement-gradient and stress samples into AgentFEM's common
+  ring-resolved SIF/J interaction-integral evidence.
+- Add a verified `SimulationResult` path for vector displacement, stress,
+  integration evidence, optimization history, and crack-tip quantities.
