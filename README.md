@@ -29,8 +29,11 @@ plane strain, Mode I/II mixtures, arbitrary crack-tip translation and
 orientation, two-sided displacement output, and common ring-resolved SIF/J
 evidence on the same slit annulus. An experimental finite-domain XDEM-D
 provider additionally accepts rectangular domains, constant displacement and
-traction boundaries, and multiple separated internal straight cracks in one
-joint solve with a report for every crack tip. These capabilities do not claim
+traction boundaries, spatial hard Dirichlet data, multiple separated straight
+cracks, and an inactive boundary crack mouth with explicit active-tip identity.
+The public mixed-mode X-VEM extended patch test is accepted; it verifies exact
+boundary enforcement, enrichment reproduction, and independent SIF/J
+extraction, not predictive crack interaction. These capabilities do not claim
 curved or intersecting cracks, crack growth, phase-field fracture, or external
 multi-crack validation.
 
@@ -108,7 +111,33 @@ reference case defaults to reproducible CPU `float64`; use
 ```bash
 python examples/mode_iii_tip/case.py --output outputs/mode_iii_tip
 python examples/vector_mixed_mode_tip/case.py
+python examples/finite_domain_benchmarks/case.py --case xvem
+python examples/finite_domain_benchmarks/case.py --case center
+python examples/finite_domain_benchmarks/case.py --case two
 ```
+
+The `xvem` command is a public extended patch test and should be accepted. The
+`center` and `two` commands remain predictive promotion candidates: they may
+finish successfully while `published_benchmark.json` correctly says `failed`.
+Promotion requires the full convergence ledger in the roadmap.
+
+The four required numerical axes use one bounded-memory entry point:
+
+```python
+report = xdem.run_finite_domain_convergence(
+    specification,
+    training_options,
+    network_layers=((32, 32), (48, 48, 48)),
+    integration_counts=(2048, 4096),
+    seeds=(2026, 2027),
+    ring_resolutions=((20, 80), (32, 128)),
+    output="outputs/xdem_convergence.json",
+)
+```
+
+Cases run sequentially by design. Each trained network is reduced to metrics
+and per-tip evidence and then released before the next case starts; parallel
+campaign execution is deferred until it has an explicit device-memory budget.
 
 The installed-package acceptance gate consumes that ordinary result rather
 than running a private test path:
@@ -170,10 +199,20 @@ result = model.step(
 ).solve_result()
 ```
 
+For remote-traction benchmarks, use `xdem.point_displacement(...)` only as a
+minimal rigid-body gauge, or start from
+`xdem.center_crack_domain_problem(...)` and
+`xdem.two_collinear_cracks_domain_problem(...)`. These factories embed the
+published normalization and make the provider write
+`published_benchmark.json`; they do not pre-approve the numerical result.
+
 The result keeps four stable tip identities and four independent
-`K_I/K_II/J` ring reports. `experimental_solver` means that the workflow is
-executable; it is not promoted to an externally validated interacting-crack
-solver until the public benchmark gate in the roadmap passes.
+`K_I/K_II/J` ring reports. It also writes one ParaView VTU with duplicated
+coincident crack faces, preserving both one-sided displacement values through
+explicit `CrackSide` and `CrackId` arrays. `experimental_solver` means that the
+workflow is executable; it is not promoted to an externally validated
+interacting-crack solver until the public benchmark and multi-axis convergence
+gates in the roadmap pass.
 
 The user-facing model remains short:
 

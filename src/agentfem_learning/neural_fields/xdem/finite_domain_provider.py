@@ -11,6 +11,7 @@ import torch
 from agentfem import learning, results, verification
 from agentfem.step_providers import StepOptionContract, StepProvider
 
+from .benchmarks import PublishedSIFReference2D
 from .finite_domain_solver import problem_from_spec, train_finite_domain
 from .reference import ReferenceTrainingOptions
 
@@ -52,6 +53,39 @@ class XDEMFiniteDomainStep:
             return self.last_result
         outcome = train_finite_domain(self.spec, self.options)
         problem = problem_from_spec(self.spec)
+        reference_summary = problem.metadata.get("reference")
+        benchmark_comparison = None
+        if reference_summary is not None:
+            reference = PublishedSIFReference2D.from_summary(reference_summary)
+            benchmark_comparison = reference.compare(
+                outcome.stress_intensity,
+                scale=float(problem.metadata["reference_scale"]),
+            )
+            quality_checks = {
+                "energy_refinement": {
+                    "actual": outcome.metrics["validation_refinement_energy_gap"],
+                    "maximum": 0.03,
+                },
+                "crack_face_traction": {
+                    "actual": outcome.metrics["relative_crack_face_traction_error"],
+                    "maximum": 0.10,
+                },
+                "bulk_equilibrium": {
+                    "actual": outcome.metrics["relative_equilibrium_residual"],
+                    "maximum": 0.10,
+                },
+                "sif_extractor_agreement": {
+                    "actual": outcome.metrics[
+                        "maximum_sif_extractor_disagreement"
+                    ],
+                    "maximum": 0.10,
+                },
+            }
+            for check in quality_checks.values():
+                check["accepted"] = check["actual"] <= check["maximum"]
+            benchmark_comparison["solver_quality_checks"] = quality_checks
+            if not all(check["accepted"] for check in quality_checks.values()):
+                benchmark_comparison["status"] = "failed"
         selected_name = self.name if name is None else str(name)
         result = results.SimulationResult(
             selected_name,
@@ -66,6 +100,21 @@ class XDEMFiniteDomainStep:
                     "resolved_device": outcome.device,
                 },
                 "stress_intensity": outcome.stress_intensity.summary(),
+                "crack_opening_stress_intensity": [
+                    item.summary()
+                    for item in outcome.crack_opening_stress_intensity
+                ],
+                "tip_enrichment": {
+                    "parameterization": (
+                        "scientific_boundary_or_load_initialized_trainable_"
+                        "williams_correction"
+                    ),
+                    "active_tip_ids": problem.active_tip_ids,
+                    "amplitudes": outcome.model.tip_amplitudes.detach().cpu().tolist(),
+                    "sif_scales": outcome.model.tip_sif_scales.detach().cpu().tolist(),
+                    "used_as_benchmark_answer": False,
+                },
+                "published_benchmark": benchmark_comparison,
                 "capability": {
                     "problem": "finite_domain_static_xdem_d",
                     "maturity": "experimental_solver",
@@ -73,7 +122,17 @@ class XDEMFiniteDomainStep:
                     "modes": ("I", "II", "mixed"),
                     "supports_multiple_cracks": True,
                     "supports_crack_growth": False,
-                    "supported_geometry": "separated_internal_straight_cracks",
+                    "supported_geometry": (
+                        "separated_straight_cracks; optional inactive boundary mouth"
+                    ),
+                    "boundary_enforcement": (
+                        "hard_spatial"
+                        if outcome.model.has_hard_spatial_boundary
+                        else "constant_or_point"
+                    ),
+                    "validation_class": problem.metadata.get(
+                        "validation_class", "predictive_solution"
+                    ),
                 },
             },
         )
@@ -99,6 +158,9 @@ class XDEMFiniteDomainStep:
         if self.output is not None:
             self.output.mkdir(parents=True, exist_ok=True)
             field_path = outcome.write_field(self.output / "finite_domain_field.npz")
+            paraview_path = outcome.write_paraview(
+                self.output / "finite_domain_discontinuous.vtu"
+            )
             weight_path = self.output / "model_state.pt"
             torch.save(
                 {
@@ -120,9 +182,17 @@ class XDEMFiniteDomainStep:
                 encoding="utf-8",
             )
             result.add_artifact("neural_field", field_path)
+            result.add_artifact("paraview_discontinuous", paraview_path)
             result.add_artifact("model_state", weight_path)
             result.add_artifact("stress_intensity", sif_path)
             result.add_artifact("crack_geometry", geometry_path)
+            if benchmark_comparison is not None:
+                benchmark_path = self.output / "published_benchmark.json"
+                benchmark_path.write_text(
+                    json.dumps(benchmark_comparison, indent=2, sort_keys=True),
+                    encoding="utf-8",
+                )
+                result.add_artifact("published_benchmark", benchmark_path)
             result.add_field(
                 "U",
                 artifact=field_path,
@@ -138,6 +208,8 @@ class XDEMFiniteDomainStep:
                     "crack_trace_side_dataset": "crack_trace_side",
                     "crack_trace_id_dataset": "crack_trace_id",
                     "crack_trace_value_dataset": "crack_trace_displacement",
+                    "paraview_artifact": "paraview_discontinuous",
+                    "paraview_layout": "single_unstructured_grid_with_duplicated_crack_faces",
                 },
             )
             result.add_field(
@@ -158,7 +230,7 @@ class XDEMFiniteDomainStep:
             "problem": "finite_domain_static_xdem_d",
             "scientific_fingerprint": self.spec.metadata["scientific_fingerprint"],
         }
-        claims = (
+        claims = [
             _upper_bound_claim(
                 "finite_domain_boundary_error",
                 "relative_boundary_error",
@@ -174,23 +246,63 @@ class XDEMFiniteDomainStep:
                 evidence=evidence,
             ),
             _upper_bound_claim(
+                "finite_domain_crack_face_traction",
+                "relative_crack_face_traction_error",
+                outcome.metrics["relative_crack_face_traction_error"],
+                0.10,
+                evidence=evidence,
+            ),
+            _upper_bound_claim(
+                "finite_domain_bulk_equilibrium",
+                "relative_equilibrium_residual",
+                outcome.metrics["relative_equilibrium_residual"],
+                0.10,
+                evidence=evidence,
+            ),
+            _upper_bound_claim(
                 "per_tip_path_variation",
                 "maximum_stress_intensity_path_variation",
                 outcome.metrics["maximum_stress_intensity_path_variation"],
                 0.08,
                 evidence=evidence,
             ),
-        )
+            _upper_bound_claim(
+                "sif_extractor_agreement",
+                "maximum_sif_extractor_disagreement",
+                outcome.metrics["maximum_sif_extractor_disagreement"],
+                0.10,
+                evidence=evidence,
+            ),
+        ]
+        if benchmark_comparison is not None:
+            maximum_error = max(
+                max(item["relative_errors"])
+                for item in benchmark_comparison["tips"]
+            )
+            tolerance = benchmark_comparison["reference"]["relative_tolerance"]
+            claims.append(
+                _upper_bound_claim(
+                    "published_stress_intensity_reference",
+                    "maximum_normalized_sif_error",
+                    maximum_error,
+                    tolerance,
+                    evidence={
+                        **evidence,
+                        "reference": benchmark_comparison["reference"],
+                    },
+                )
+            )
         finite = bool(np.all(np.isfinite(outcome.losses)))
         reduced = bool(len(outcome.losses) and outcome.losses[-1] < outcome.losses[0])
         result.add_verification(
             verification.VerificationReport(
-                claims=claims,
+                claims=tuple(claims),
                 computed=True,
                 converged=finite and reduced,
                 scope=(
-                    "finite-domain XDEM-D numerical consistency; external "
-                    "single- and multi-crack benchmark validation remains separate"
+                    "finite-domain XDEM-D numerical consistency and any attached "
+                    "published reference; predictive and patch-test evidence remain "
+                    "distinct"
                 ),
                 quality_policy="experimental_solver",
             )

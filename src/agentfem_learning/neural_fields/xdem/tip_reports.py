@@ -136,6 +136,53 @@ class MultiTipStressIntensityReport2D:
         }
 
 
+@dataclass(frozen=True)
+class CrackOpeningSIFReport2D:
+    """Independent near-face SIF estimate from crack-opening displacement."""
+
+    tip_id: str
+    radii: tuple[float, ...]
+    k_i_by_radius: tuple[float, ...]
+    k_ii_by_radius: tuple[float, ...]
+    metadata: Mapping[str, object] = field(default_factory=dict)
+
+    @property
+    def k_i(self) -> float:
+        return _zero_radius_intercept(self.radii, self.k_i_by_radius)
+
+    @property
+    def k_ii(self) -> float:
+        return _zero_radius_intercept(self.radii, self.k_ii_by_radius)
+
+    @property
+    def path_variation(self) -> float:
+        values = np.column_stack((self.k_i_by_radius, self.k_ii_by_radius))
+        coordinate = np.sqrt(np.asarray(self.radii, dtype=float))
+        fitted = np.column_stack(
+            (
+                np.polyval(np.polyfit(coordinate, values[:, 0], 1), coordinate),
+                np.polyval(np.polyfit(coordinate, values[:, 1], 1), coordinate),
+            )
+        )
+        center = np.asarray((self.k_i, self.k_ii))
+        spread = np.max(np.linalg.norm(values - fitted, axis=1))
+        return float(spread / max(np.linalg.norm(center), 1.0e-30))
+
+    def summary(self) -> dict[str, object]:
+        return {
+            "kind": "crack_opening_sif_report_2d",
+            "tip_id": self.tip_id,
+            "K_I": self.k_i,
+            "K_II": self.k_ii,
+            "radii": self.radii,
+            "K_I_by_radius": self.k_i_by_radius,
+            "K_II_by_radius": self.k_ii_by_radius,
+            "path_variation": self.path_variation,
+            "extraction_method": "crack_opening_displacement_extrapolation",
+            "metadata": dict(self.metadata),
+        }
+
+
 def tip_integration_plan(
     cracks: fracture.CrackSet2D,
     *,
@@ -230,6 +277,63 @@ def stress_intensity_reports(
     )
 
 
+def crack_opening_sif_reports(
+    field: fracture.FractureField2D,
+    *,
+    cracks: fracture.CrackSet2D,
+    material,
+    plan: TipIntegrationPlan2D,
+    face_offset_fraction: float = 1.0e-6,
+) -> tuple[CrackOpeningSIFReport2D, ...]:
+    """Estimate every selected tip from two-sided near-face displacements.
+
+    This is an independent diagnostic, not a replacement for the domain
+    interaction integral. Agreement between the two methods is stronger
+    evidence than either scalar estimate alone.
+    """
+
+    offset = float(face_offset_fraction)
+    if not 0.0 < offset < 1.0e-2:
+        raise ValueError("face_offset_fraction must lie in (0, 1e-2).")
+    selected = material.summary()
+    ratio = float(selected["poisson_ratio"])
+    shear = float(selected["young_modulus"]) / (2.0 * (1.0 + ratio))
+    kappa = 3.0 - 4.0 * ratio
+    if selected["assumption"] == "plane_stress":
+        kappa = (3.0 - ratio) / (1.0 + ratio)
+    reports = []
+    for tip_id in plan.tip_ids:
+        tip = cracks.tip(tip_id)
+        radii = plan.radii_by_tip[tip_id]
+        extension = np.asarray(tip.extension_direction, dtype=float)
+        normal = np.asarray(tip.normal, dtype=float)
+        mode_i = []
+        mode_ii = []
+        for radius in radii:
+            center = np.asarray(tip.point, dtype=float) - radius * extension
+            epsilon = offset * radius
+            points = np.stack((center + epsilon * normal, center - epsilon * normal))
+            displacement = np.asarray(field.displacement(points), dtype=float)
+            jump = displacement[0] - displacement[1]
+            local_jump = np.asarray((jump @ extension, jump @ normal), dtype=float)
+            factor = shear * np.sqrt(2.0 * pi / radius) / (kappa + 1.0)
+            mode_ii.append(float(factor * local_jump[0]))
+            mode_i.append(float(factor * local_jump[1]))
+        reports.append(
+            CrackOpeningSIFReport2D(
+                tip_id=tip_id,
+                radii=tuple(radii),
+                k_i_by_radius=tuple(mode_i),
+                k_ii_by_radius=tuple(mode_ii),
+                metadata={
+                    "face_offset_fraction": offset,
+                    "coordinate_system": "tip_local_extension_normal",
+                },
+            )
+        )
+    return tuple(reports)
+
+
 def _tip_report(field, *, cracks, material, plan, tip_id, metadata):
     tip = cracks.tip(tip_id)
     rotation = np.column_stack((tip.extension_direction, tip.normal))
@@ -300,9 +404,16 @@ def _tensor_to_local(values, rotation):
     return np.einsum("ai,nab,bj->nij", rotation, selected, rotation)
 
 
+def _zero_radius_intercept(radii, values) -> float:
+    coordinate = np.sqrt(np.asarray(radii, dtype=float))
+    return float(np.polyfit(coordinate, np.asarray(values, dtype=float), 1)[1])
+
+
 __all__ = [
+    "CrackOpeningSIFReport2D",
     "MultiTipStressIntensityReport2D",
     "TipIntegrationPlan2D",
+    "crack_opening_sif_reports",
     "stress_intensity_reports",
     "tip_integration_plan",
 ]
