@@ -25,8 +25,9 @@ NeuralFieldSpec -> AgentFEM Step Provider -> PyTorch energy optimization
 
 The XDEM providers are experimental. The packaging regression is a normalized
 Williams Mode-III field. The first vector-elastic reference adds plane stress,
-plane strain, Mode I/II mixtures, two-sided displacement output, and common
-ring-resolved SIF/J evidence on the same slit annulus. These references verify
+plane strain, Mode I/II mixtures, arbitrary crack-tip translation and
+orientation, two-sided displacement output, and common ring-resolved SIF/J
+evidence on the same slit annulus. These references verify
 the provider and scientific-evidence boundaries; they do not claim general
 geometry, multiple cracks, crack growth, phase-field fracture, or experimental
 validation.
@@ -122,6 +123,8 @@ integrity-checked `SimulationResult`.
 The vector-elastic model is equally short:
 
 ```python
+from math import pi
+
 from agentfem_learning.neural_fields.xdem import vector_tip_spec
 
 result = model.step(
@@ -129,6 +132,7 @@ result = model.step(
         assumption="plane_stress",
         k_i=1.0,
         k_ii=0.5,
+        crack_angle=pi / 6,
     ),
     epochs=500,
     output="outputs/vector_mixed_mode_tip",

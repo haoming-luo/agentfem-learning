@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from math import pi
 from pathlib import Path
 
 from agentfem import extensions, models, studies
@@ -20,6 +21,8 @@ def main() -> None:
             assumption="plane_stress",
             k_i=1.0,
             k_ii=0.5,
+            tip=(0.2, -0.1),
+            crack_angle=pi / 6.0,
         ),
         epochs=500,
         output=Path("outputs/vector_mixed_mode_tip"),

@@ -66,7 +66,9 @@ physical jump is not erased by continuous visualization interpolation.
 
 The vector reference uses the same provider lifecycle for two displacement
 components. Plane-stress or plane-strain energy is differentiated by PyTorch;
-Mode-I and Mode-II Williams bases carry the declared crack jump. Autograd
+Mode-I and Mode-II Williams bases carry the declared crack jump. The crack-tip
+frame may be translated and rotated independently of the global basis, with
+fields, tensor gradients, and SIF signs transformed consistently. Autograd
 stress and displacement-gradient samples then enter AgentFEM core's
 solver-neutral interaction integral. Therefore the analytical field, ordinary
 FEM benchmark, and neural field use the same (K_I/K_{II}/J) conventions and
@@ -78,9 +80,9 @@ path-sensitivity report rather than three provider-specific postprocessors.
    provider regression.
 2. Implement the interaction/domain-integral adapter first against analytical
    and ordinary FEM fields, independently of neural optimization.
-3. Add one vector-elastic 2D XDEM provider for a published Mode-I benchmark,
-   then an inclined mixed-mode benchmark. Review upstream licensing before
-   reusing code; keep an independent implementation possible.
+3. Retain the implemented inclined mixed-mode manufactured benchmark, then add
+   one external finite-domain Mode-I benchmark. Review upstream licensing
+   before reusing code; keep an independent implementation possible.
 4. Add multiple non-intersecting straight cracks only after per-tip SIF and
    unsupported-geometry failures are stable.
 5. Add phase-field energy and irreversibility only after AgentFEM's common

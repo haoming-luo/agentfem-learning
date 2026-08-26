@@ -36,6 +36,8 @@ class WilliamsVectorNetwork(torch.nn.Module):
         assumption: str,
         reference_k_i: float,
         reference_k_ii: float,
+        tip: tuple[float, float] = (0.0, 0.0),
+        crack_angle: float = 0.0,
         hidden_layers: tuple[int, ...] = (24, 24),
         dtype: torch.dtype = torch.float64,
     ) -> None:
@@ -45,6 +47,8 @@ class WilliamsVectorNetwork(torch.nn.Module):
         self.young_modulus = float(young_modulus)
         self.poisson_ratio = float(poisson_ratio)
         self.assumption = str(assumption)
+        self.tip = tuple(float(item) for item in tip)
+        self.crack_angle = float(crack_angle)
         widths = (6, *(int(item) for item in hidden_layers), 2)
         layers: list[torch.nn.Module] = []
         for input_width, output_width in pairwise(widths):
@@ -63,8 +67,11 @@ class WilliamsVectorNetwork(torch.nn.Module):
         )
 
     def features(self, coordinates: torch.Tensor) -> torch.Tensor:
-        x = coordinates[:, 0:1]
-        y = coordinates[:, 1:2]
+        local, _ = _local_coordinates(
+            coordinates, tip=self.tip, crack_angle=self.crack_angle
+        )
+        x = local[:, 0:1]
+        y = local[:, 1:2]
         radial = torch.sqrt(torch.clamp(x.square() + y.square(), min=1.0e-24))
         angle = torch.atan2(y, x)
         return torch.cat(
@@ -80,7 +87,10 @@ class WilliamsVectorNetwork(torch.nn.Module):
         )
 
     def forward(self, coordinates: torch.Tensor) -> torch.Tensor:
-        radial = torch.linalg.vector_norm(coordinates, dim=1, keepdim=True)
+        local, _ = _local_coordinates(
+            coordinates, tip=self.tip, crack_angle=self.crack_angle
+        )
+        radial = torch.linalg.vector_norm(local, dim=1, keepdim=True)
         span = self.radius - self.tip_core_radius
         envelope = (
             (radial - self.tip_core_radius)
@@ -94,6 +104,8 @@ class WilliamsVectorNetwork(torch.nn.Module):
             assumption=self.assumption,
             k_i=self.tip_amplitudes[0],
             k_ii=self.tip_amplitudes[1],
+            tip=self.tip,
+            crack_angle=self.crack_angle,
         )
         return enriched + envelope * self.regular(self.features(coordinates))
 
@@ -143,8 +155,10 @@ def williams_vector_field(
     assumption: str,
     k_i,
     k_ii,
+    tip: tuple[float, float] = (0.0, 0.0),
+    crack_angle: float = 0.0,
 ) -> torch.Tensor:
-    """Return the differentiable leading mixed-mode Williams displacement."""
+    """Return global displacement from a local mixed-mode Williams field."""
 
     ratio = float(poisson_ratio)
     selected = str(assumption)
@@ -154,8 +168,11 @@ def williams_vector_field(
     kappa = 3.0 - 4.0 * ratio
     if selected == "plane_stress":
         kappa = (3.0 - ratio) / (1.0 + ratio)
-    x = coordinates[:, 0]
-    y = coordinates[:, 1]
+    local, rotation = _local_coordinates(
+        coordinates, tip=tip, crack_angle=crack_angle
+    )
+    x = local[:, 0]
+    y = local[:, 1]
     radial = torch.sqrt(torch.clamp(x.square() + y.square(), min=1.0e-24))
     angle = torch.atan2(y, x)
     half = 0.5 * angle
@@ -173,7 +190,37 @@ def williams_vector_field(
         - mode_ii * cosine * (kappa - 2.0 + full_cosine)
     )
     scale = torch.sqrt(radial / (2.0 * pi)) / (2.0 * shear)
-    return scale[:, None] * torch.stack((first, second), dim=1)
+    local_displacement = scale[:, None] * torch.stack((first, second), dim=1)
+    return local_displacement @ rotation.transpose(0, 1)
+
+
+def _local_coordinates(coordinates, *, tip, crack_angle):
+    angle = torch.as_tensor(
+        crack_angle, dtype=coordinates.dtype, device=coordinates.device
+    )
+    cosine = torch.cos(angle)
+    sine = torch.sin(angle)
+    # Columns are the local extension and normal axes in the global basis.
+    rotation = torch.stack(
+        (
+            torch.stack((cosine, -sine)),
+            torch.stack((sine, cosine)),
+        )
+    )
+    origin = torch.as_tensor(tip, dtype=coordinates.dtype, device=coordinates.device)
+    return (coordinates - origin) @ rotation, rotation
+
+
+def _global_coordinates(local, parameters):
+    _, rotation = _local_coordinates(
+        local,
+        tip=(0.0, 0.0),
+        crack_angle=parameters["crack_angle"],
+    )
+    origin = torch.as_tensor(
+        parameters["tip"], dtype=local.dtype, device=local.device
+    )
+    return (local @ rotation.transpose(0, 1) + origin).detach().requires_grad_(True)
 
 
 def train_vector_reference(
@@ -197,35 +244,37 @@ def train_vector_reference(
         assumption=parameters["assumption"],
         reference_k_i=parameters["K_I"],
         reference_k_ii=parameters["K_II"],
+        tip=parameters["tip"],
+        crack_angle=parameters["crack_angle"],
         hidden_layers=options.hidden_layers,
         dtype=dtype,
     ).to(device)
-    domain = _sample_annulus(
+    domain = _global_coordinates(_sample_annulus(
         domain_count,
         radius=radius,
         core=core,
         seed=options.seed,
         dtype=dtype,
         device=device,
-    )
-    boundary = _sample_boundaries(
+    ), parameters)
+    boundary = _global_coordinates(_sample_boundaries(
         boundary_count,
         radius=radius,
         core=core,
         dtype=dtype,
         device=device,
-    )
+    ), parameters)
     boundary_target = _reference_field(boundary, parameters).detach()
     area = pi * (radius * radius - core * core)
     refinement_rule = _integration_rule(spec, "refinement")
-    reference_points = _evaluation_grid(
+    reference_points = _global_coordinates(_evaluation_grid(
         count=refinement_rule.count,
         seed=refinement_rule.seed,
         radius=radius,
         core=core,
         dtype=dtype,
         device=device,
-    )
+    ), parameters)
     _, _, reference_density = _elastic_state(
         _reference_field(reference_points, parameters),
         reference_points,
@@ -287,14 +336,14 @@ def train_vector_reference(
             epochs.append(float(options.adam_epochs + step))
             losses.append(float(selected.detach().cpu()))
 
-    evaluation = _evaluation_grid(
+    evaluation = _global_coordinates(_evaluation_grid(
         count=_integration_rule(spec, "validation").count,
         seed=_integration_rule(spec, "validation").seed,
         radius=radius,
         core=core,
         dtype=dtype,
         device=device,
-    )
+    ), parameters)
     prediction = model(evaluation)
     reference = _reference_field(evaluation, parameters)
     _, stress, density = _elastic_state(
@@ -315,6 +364,7 @@ def train_vector_reference(
         dtype=dtype,
         device=device,
     )
+    trace_coordinates = _global_coordinates(trace_coordinates, parameters)
     trace_prediction = model(trace_coordinates)
     trace_reference = _reference_field(trace_coordinates, parameters)
     metrics = _vector_metrics(
@@ -358,6 +408,8 @@ def _reference_field(coordinates, parameters):
         assumption=parameters["assumption"],
         k_i=parameters["K_I"],
         k_ii=parameters["K_II"],
+        tip=parameters["tip"],
+        crack_angle=parameters["crack_angle"],
     )
 
 
@@ -397,8 +449,15 @@ def _elastic_state(displacement, coordinates, parameters, *, create_graph):
 def _stress_intensity_report(model, parameters, *, dtype, device):
     radius = parameters["radius"]
     core = parameters["tip_core_radius"]
+    tip_point = np.asarray(parameters["tip"], dtype=float)
+    angle_value = float(parameters["crack_angle"])
+    tangent = np.asarray((np.cos(angle_value), np.sin(angle_value)), dtype=float)
     cracks = fracture.crack_set(
-        fracture.segment("branch_cut", start=(-radius, 0.0), end=(0.0, 0.0))
+        fracture.segment(
+            "branch_cut",
+            start=tuple(tip_point - radius * tangent),
+            end=tuple(tip_point),
+        )
     )
     material = fracture.linear_elastic_fracture_material(
         young_modulus=parameters["young_modulus"],
@@ -425,21 +484,31 @@ def _stress_intensity_report(model, parameters, *, dtype, device):
             torch.arange(angular_count, dtype=dtype, device=device) + 0.5
         ) * (2.0 * pi / angular_count)
         rr, tt = torch.meshgrid(radial, angle, indexing="ij")
-        coordinates = torch.stack((rr * torch.cos(tt), rr * torch.sin(tt)), dim=-1)
-        coordinates = coordinates.reshape(-1, 2).requires_grad_(True)
+        local_coordinates = torch.stack(
+            (rr * torch.cos(tt), rr * torch.sin(tt)), dim=-1
+        ).reshape(-1, 2)
+        coordinates = _global_coordinates(local_coordinates, parameters)
         prediction = model(coordinates)
         gradient, stress, _ = _elastic_state(
             prediction, coordinates, parameters, create_graph=False
         )
         points = coordinates.detach().cpu().numpy()
-        distance = np.linalg.norm(points, axis=1)
-        q_gradient = -points / distance[:, None] / (outer - inner)
+        local_points = local_coordinates.detach().cpu().numpy()
+        distance = np.linalg.norm(local_points, axis=1)
+        q_gradient = -local_points / distance[:, None] / (outer - inner)
         weights = np.full(
             len(points), pi * (outer * outer - inner * inner) / len(points)
         )
 
-        actual_stress = stress.detach().cpu().numpy()
-        actual_gradient = gradient.detach().cpu().numpy()
+        rotation = np.asarray(
+            ((np.cos(angle_value), -np.sin(angle_value)),
+             (np.sin(angle_value), np.cos(angle_value))),
+            dtype=float,
+        )
+        actual_stress = _tensor_to_local(stress.detach().cpu().numpy(), rotation)
+        actual_gradient = _tensor_to_local(
+            gradient.detach().cpu().numpy(), rotation
+        )
         for auxiliary, collected in (
             (auxiliary_i, mode_i),
             (auxiliary_ii, mode_ii),
@@ -447,9 +516,11 @@ def _stress_intensity_report(model, parameters, *, dtype, device):
             samples = fracture.InteractionIntegralSamples2D(
                 actual_stress=actual_stress,
                 actual_displacement_gradient=actual_gradient,
-                auxiliary_stress=auxiliary.stress(points),
-                auxiliary_displacement_gradient=auxiliary.displacement_gradient(
-                    points
+                auxiliary_stress=_tensor_to_local(
+                    auxiliary.stress(points), rotation
+                ),
+                auxiliary_displacement_gradient=_tensor_to_local(
+                    auxiliary.displacement_gradient(points), rotation
                 ),
                 q_gradient=q_gradient,
                 weights=weights,
@@ -465,6 +536,10 @@ def _stress_intensity_report(model, parameters, *, dtype, device):
         relative_path_tolerance=0.08,
         metadata={"provider": "agentfem-learning.xdem"},
     )
+
+
+def _tensor_to_local(values, rotation):
+    return np.einsum("ai,nab,bj->nij", rotation, values, rotation)
 
 
 def _vector_metrics(
@@ -533,6 +608,8 @@ def _vector_parameters(spec):
     return {
         "radius": float(geometry["radius"]),
         "tip_core_radius": float(geometry["tip_core_radius"]),
+        "tip": tuple(float(item) for item in geometry.get("tip", (0.0, 0.0))),
+        "crack_angle": float(geometry.get("crack_angle", 0.0)),
         "young_modulus": float(material["young_modulus"]),
         "poisson_ratio": float(material["poisson_ratio"]),
         "assumption": str(material["assumption"]),

@@ -24,8 +24,9 @@ core `model.step(target=spec, executor=...)` boundary.
 
 - **Milestone A -- single-crack vector elasticity (foundation implemented):**
   plane stress/strain, Mode-I/II mixtures, a physical jump, differentiable
-  Williams enrichment, independent energy integration, and ring-resolved SIF/J
-  now run through one AgentFEM Step. The common interaction integral is checked
+  Williams enrichment, arbitrary straight-tip orientation, independent energy
+  integration, and ring-resolved SIF/J now run through one AgentFEM Step. The
+  common interaction integral is checked
   first against exact fields and an ordinary P2 FEM center crack. Remaining
   promotion work is a general finite-domain displacement/traction boundary
   adapter and an external published vector benchmark; the slit-annulus

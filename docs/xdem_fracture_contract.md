@@ -60,8 +60,9 @@ datasets; it must not average the two traces into one continuous nodal field.
    (implemented);
 2. one Mode-I vector-elastic manufactured XDEM benchmark (implemented on the
    slit annulus; external finite-domain promotion remains);
-3. one inclined mixed-mode geometry benchmark (the current mixed-mode
-   manufactured field verifies physics and signs, not inclined meshing);
+3. one inclined mixed-mode geometry benchmark (implemented for arbitrary tip
+   translation and orientation on the manufactured slit annulus; external
+   finite-domain geometry remains a promotion gate);
 4. multiple separated straight cracks with stable per-tip reports;
 5. Campaign, seed ensemble, checkpoint, warm start, and multi-axis convergence.
 

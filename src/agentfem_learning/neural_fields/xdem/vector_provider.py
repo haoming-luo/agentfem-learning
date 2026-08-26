@@ -11,9 +11,31 @@ import torch
 from agentfem import learning, results, verification
 from agentfem.step_providers import StepOptionContract, StepProvider
 
-from .provider import _upper_bound_claim
 from .reference import ReferenceTrainingOptions
 from .vector_reference import train_vector_reference
+
+
+def _vector_upper_bound_claim(name, observable, actual, tolerance):
+    return verification.VerificationClaim.compare(
+        name=name,
+        observable=observable,
+        actual=float(actual),
+        expected=0.0,
+        reference=(
+            "analytical leading mixed-mode Williams vector field on an "
+            "oriented slit annulus"
+        ),
+        absolute_tolerance=float(tolerance),
+        validity_domain=(
+            "homogeneous isotropic plane-stress or plane-strain elasticity; "
+            "prescribed Williams displacement on inner and outer circles; "
+            "traction-free straight branch-cut faces"
+        ),
+        evidence={
+            "provider": "agentfem-learning.xdem",
+            "problem": "williams_vector_tip",
+        },
+    )
 
 
 class XDEMVectorStep:
@@ -171,37 +193,37 @@ class XDEMVectorStep:
             )
 
         claims = (
-            _upper_bound_claim(
+            _vector_upper_bound_claim(
                 "vector_field_error",
                 "relative_l2_error",
                 outcome.metrics["relative_l2_error"],
                 0.03,
             ),
-            _upper_bound_claim(
+            _vector_upper_bound_claim(
                 "vector_boundary_error",
                 "relative_boundary_error",
                 outcome.metrics["relative_boundary_error"],
                 0.03,
             ),
-            _upper_bound_claim(
+            _vector_upper_bound_claim(
                 "vector_energy_error",
                 "relative_energy_error",
                 outcome.metrics["relative_energy_error"],
                 0.03,
             ),
-            _upper_bound_claim(
+            _vector_upper_bound_claim(
                 "stress_intensity_error",
                 "stress_intensity_relative_error",
                 outcome.metrics["stress_intensity_relative_error"],
                 0.03,
             ),
-            _upper_bound_claim(
+            _vector_upper_bound_claim(
                 "stress_intensity_path_variation",
                 "stress_intensity_path_variation",
                 outcome.metrics["stress_intensity_path_variation"],
                 0.03,
             ),
-            _upper_bound_claim(
+            _vector_upper_bound_claim(
                 "independent_integration_consistency",
                 "maximum_independent_integration_gap",
                 max(

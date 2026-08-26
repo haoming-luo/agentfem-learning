@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from math import cos, pi, sin
 
 import numpy as np
 import pytest
@@ -15,6 +16,7 @@ from agentfem_learning.neural_fields.xdem import (
 )
 from agentfem_learning.neural_fields.xdem.reference import ReferenceTrainingOptions
 from agentfem_learning.neural_fields.xdem.vector_reference import (
+    _stress_intensity_report,
     train_vector_reference,
     williams_vector_field,
 )
@@ -58,14 +60,101 @@ def test_torch_williams_vector_field_matches_core_reference(assumption):
     )
 
 
+def test_inclined_williams_field_and_sif_use_the_local_crack_frame():
+    angle = pi / 6.0
+    tip_point = (0.2, -0.1)
+    tangent = np.asarray((cos(angle), sin(angle)))
+    cracks = fracture.crack_set(
+        fracture.segment(
+            "branch_cut",
+            start=tuple(np.asarray(tip_point) - tangent),
+            end=tip_point,
+        )
+    )
+    material = fracture.linear_elastic_fracture_material(
+        young_modulus=1200.0,
+        poisson_ratio=0.23,
+        assumption="plane_strain",
+    )
+    reference = fracture.WilliamsField2D(
+        cracks.tip("branch_cut:end"), material, k_i=2.0, k_ii=-0.75
+    )
+    local_points = np.asarray(
+        ((0.4, 0.2), (-0.3, 0.15), (-0.3, -0.15), (0.1, -0.45))
+    )
+    rotation = np.asarray(
+        ((cos(angle), -sin(angle)), (sin(angle), cos(angle)))
+    )
+    points = local_points @ rotation.T + np.asarray(tip_point)
+
+    actual = williams_vector_field(
+        torch.tensor(points, dtype=torch.float64),
+        young_modulus=1200.0,
+        poisson_ratio=0.23,
+        assumption="plane_strain",
+        k_i=2.0,
+        k_ii=-0.75,
+        tip=tip_point,
+        crack_angle=angle,
+    )
+    np.testing.assert_allclose(
+        actual.detach().numpy(), reference.displacement(points), rtol=2.0e-12
+    )
+
+    network = WilliamsVectorNetwork(
+        radius=1.0,
+        tip_core_radius=0.05,
+        young_modulus=1200.0,
+        poisson_ratio=0.23,
+        assumption="plane_strain",
+        reference_k_i=2.0,
+        reference_k_ii=-0.75,
+        tip=tip_point,
+        crack_angle=angle,
+        hidden_layers=(8,),
+    )
+    with torch.no_grad():
+        network.tip_amplitudes[:] = torch.tensor((2.0, -0.75))
+        for parameter in network.regular.parameters():
+            parameter.zero_()
+    report = _stress_intensity_report(
+        network,
+        {
+            "radius": 1.0,
+            "tip_core_radius": 0.05,
+            "young_modulus": 1200.0,
+            "poisson_ratio": 0.23,
+            "assumption": "plane_strain",
+            "K_I": 2.0,
+            "K_II": -0.75,
+            "tip": tip_point,
+            "crack_angle": angle,
+        },
+        dtype=torch.float64,
+        device=torch.device("cpu"),
+    )
+    assert report.k_i == pytest.approx(2.0, rel=2.0e-3)
+    assert report.k_ii == pytest.approx(-0.75, rel=2.0e-3)
+    assert report.coordinate_system["extension_direction"] == pytest.approx(
+        tangent
+    )
+
+
 def test_vector_spec_preserves_material_crack_and_mode_semantics():
     spec = vector_tip_spec(
-        assumption="plane_stress", k_i=2.0, k_ii=-0.5, domain_samples=256
+        assumption="plane_stress",
+        k_i=2.0,
+        k_ii=-0.5,
+        tip=(0.2, -0.1),
+        crack_angle=pi / 6.0,
+        domain_samples=256,
     )
 
     assert spec.metadata["problem"] == "williams_vector_tip"
     assert spec.metadata["material"]["assumption"] == "plane_stress"
     assert spec.metadata["loading"] == {"K_I": 2.0, "K_II": -0.5}
+    assert spec.metadata["geometry"]["tip"] == (0.2, -0.1)
+    assert spec.metadata["geometry"]["crack_angle"] == pytest.approx(pi / 6.0)
     assert spec.fields[0].components == ("U1", "U2")
     assert spec.integration.validation.independent_of == (
         "vector_slit_annulus_energy_points",

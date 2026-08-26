@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from math import isfinite
+from math import cos, isfinite, sin
 
 from agentfem import fracture, learning
 
@@ -16,10 +16,18 @@ def vector_tip_spec(
     assumption: str = "plane_strain",
     k_i: float = 1.0,
     k_ii: float = 0.0,
+    tip: tuple[float, float] = (0.0, 0.0),
+    crack_angle: float = 0.0,
     domain_samples: int = 2048,
     boundary_samples: int = 128,
 ) -> learning.NeuralFieldSpec:
-    """Declare one stationary mixed-mode Williams field on a slit annulus."""
+    """Declare one oriented stationary mixed-mode Williams field.
+
+    ``crack_angle`` is the crack-extension direction measured counterclockwise
+    from the global x-axis.  Stress-intensity factors retain their conventional
+    meaning in this local crack-tip frame while fields are returned in global
+    coordinates.
+    """
 
     radius = float(radius)
     core = float(tip_core_radius)
@@ -30,6 +38,8 @@ def vector_tip_spec(
     )
     mode_i = float(k_i)
     mode_ii = float(k_ii)
+    tip_point = tuple(float(item) for item in tip)
+    angle = float(crack_angle)
     if radius <= 0.0:
         raise ValueError("radius must be positive.")
     if not 0.0 < core < radius:
@@ -43,12 +53,22 @@ def vector_tip_spec(
         raise ValueError("Reference stress-intensity factors must be finite.")
     if mode_i == 0.0 and mode_ii == 0.0:
         raise ValueError("At least one reference stress-intensity factor must be nonzero.")
+    if len(tip_point) != 2 or any(not isfinite(item) for item in tip_point):
+        raise ValueError("tip must contain two finite coordinates.")
+    if not isfinite(angle):
+        raise ValueError("crack_angle must be finite.")
+
+    tangent = (cos(angle), sin(angle))
+    crack_start = (
+        tip_point[0] - radius * tangent[0],
+        tip_point[1] - radius * tangent[1],
+    )
 
     cracks = fracture.crack_set(
         fracture.segment(
             "branch_cut",
-            start=(-radius, 0.0),
-            end=(0.0, 0.0),
+            start=crack_start,
+            end=tip_point,
             metadata={"role": "traction_free_branch_cut"},
         ),
         name="vector_williams_reference_crack",
@@ -194,6 +214,9 @@ def vector_tip_spec(
                 "kind": "slit_annulus",
                 "radius": radius,
                 "tip_core_radius": core,
+                "tip": tip_point,
+                "crack_angle": angle,
+                "coordinate_system": "global_cartesian_with_local_crack_tip_frame",
                 "cracks": cracks.summary(),
                 "crack_fingerprint": cracks.fingerprint,
             },
