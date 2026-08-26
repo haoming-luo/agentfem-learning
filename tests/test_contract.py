@@ -19,6 +19,16 @@ def test_mode_iii_spec_is_machine_readable_and_explicitly_bounded():
     assert spec.objective_kinds == ("energy",)
     assert spec.representations[0].architecture == "xdem:williams_mlp"
     assert spec.metadata["maturity"] == "experimental_reference"
+    assert spec.integration.validation.independent_of == (
+        "slit_annulus_energy_points",
+    )
+    assert spec.integration.refinements[0].count > spec.integration.validation.count
+    geometry = spec.metadata["geometry"]
+    assert geometry["cracks"]["tip_ids"] == [
+        "branch_cut:start",
+        "branch_cut:end",
+    ]
+    assert len(geometry["crack_fingerprint"]) == 64
     json.dumps(spec.summary())
 
 

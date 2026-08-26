@@ -15,13 +15,27 @@ core `model.step(target=spec, executor=...)` boundary.
 4. Record provider and framework versions, architecture configuration,
    scientific specification, state artifact, optimization history, and
    independent checks without pickling a live Python model into the result.
+5. Preserve core `CrackSet2D` identity, paired one-sided trace samples, and an
+   accepted training/validation/refinement `IntegrationEvidence` record.
 
 ## Next providers
 
 ### Neural fields
 
-- Promote XDEM only through published fracture benchmarks beyond the current
-  manufactured Williams field.
+- **Milestone A -- single-crack vector elasticity:** implement plane stress and
+  plane strain, displacement/traction conditions, jump and optional Williams
+  enrichment, and Mode-I/mixed-mode public benchmarks. Build the SIF/J
+  interaction-integral adapter against analytical and FEM fields before using
+  XDEM output as its input.
+- **Milestone B -- static multi-crack fields:** support mutually separated
+  straight cracks, stable per-tip identities, geometry-aware integration
+  radii, independent SIF reports, and one public two-crack benchmark. Reject
+  intersecting, touching, curved, and boundary-terminating geometries until a
+  separately verified provider supports them.
+- **Milestone C -- research production:** reuse AgentFEM Campaign for seeds and
+  parameters; add checkpoint/best state, explicit warm start with cold-start
+  fallback, multi-axis convergence, and ParaView output with duplicated
+  crack-face topology.
 - Add a DeepXDE binding only where `NeuralFieldSpec` can be lowered without
   pretending that arbitrary UFL is a valid strong-form residual.
 - Keep each framework's backend selection inside its provider; the core

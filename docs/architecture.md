@@ -9,7 +9,8 @@ because their algorithms differ.
 
 | Layer | Owner |
 | --- | --- |
-| fields, objectives, conditions, sampling, inverse parameters | AgentFEM core |
+| fields, objectives, conditions, integration identity, inverse parameters | AgentFEM core |
+| crack geometry, tip identity, SIF/J evidence, result trust | AgentFEM core |
 | PyTorch module, optimizer, XDEM enrichment, device selection | `agentfem_learning.neural_fields.xdem` |
 | Study, Model, Step selection, extension identity | AgentFEM core |
 | field samples, optimization history, scientific claims | SimulationResult |
@@ -55,15 +56,26 @@ boundary condition while the enrichment carries the physical crack jump.
 Midpoint tensor-product integration is used for the energy. Small random
 point clouds are intentionally avoided because an expressive network can
 exploit unsampled regions and report a nonphysical energy below the harmonic
-reference.
+reference. Training points, held-out validation points, and a refined rule are
+separate `IntegrationRule` records. Their objective values are compared in one
+`IntegrationEvidence` record attached to `SimulationResult`.
+
+The branch cut is a core `CrackSet2D` asset with stable crack and tip IDs. The
+NPZ field contains paired one-sided trace coordinates and side labels, so its
+physical jump is not erased by continuous visualization interpolation.
 
 ## Promotion route
 
-1. Keep the Williams field as the packaging and provider regression.
-2. Add a reviewed upstream discrete XDEM binding behind a separate provider
-   name and reproduce one published Mode-I benchmark.
-3. Add SIF extraction with analytical and FEM cross-checks.
-4. Add phase-field energy and irreversibility only after AgentFEM's common
+1. Keep the Williams field as the packaging, discontinuity, integration, and
+   provider regression.
+2. Implement the interaction/domain-integral adapter first against analytical
+   and ordinary FEM fields, independently of neural optimization.
+3. Add one vector-elastic 2D XDEM provider for a published Mode-I benchmark,
+   then an inclined mixed-mode benchmark. Review upstream licensing before
+   reusing code; keep an independent implementation possible.
+4. Add multiple non-intersecting straight cracks only after per-tip SIF and
+   unsupported-geometry failures are stable.
+5. Add phase-field energy and irreversibility only after AgentFEM's common
    phase-field contract exists.
-5. Add crack growth only with path, energy, sampling, and repeatability
+6. Add crack growth only with path, energy, sampling, and repeatability
    convergence evidence.

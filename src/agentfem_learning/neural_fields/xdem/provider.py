@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import asdict
 from pathlib import Path
 
@@ -46,6 +47,13 @@ class XDEMReferenceStep:
         if self.last_result is not None:
             return self.last_result
         outcome = train_mode_iii_reference(self.spec, self.options)
+        integration_evidence = learning.integration_consistency_check(
+            self.spec.integration,
+            training_value=outcome.metrics["training_integral_energy"],
+            validation_value=outcome.metrics["predicted_energy"],
+            refinement_values=(outcome.metrics["refined_integral_energy"],),
+            relative_tolerance=0.05,
+        )
         selected_name = self.name if name is None else str(name)
         result = results.SimulationResult(
             selected_name,
@@ -59,6 +67,7 @@ class XDEMReferenceStep:
                     "torch_version": torch.__version__,
                     "resolved_device": outcome.device,
                 },
+                "integration_evidence": integration_evidence.summary(),
                 "capability": {
                     "problem": "williams_mode_iii_tip",
                     "maturity": "experimental_reference",
@@ -80,6 +89,16 @@ class XDEMReferenceStep:
             "final_training_loss",
             outcome.losses[-1],
             kind="optimization",
+        )
+        result.add_quantity(
+            "training_validation_integration_gap",
+            integration_evidence.training_validation_gap,
+            kind="integration_verification",
+        )
+        result.add_quantity(
+            "validation_refinement_integration_gap",
+            integration_evidence.refinement_gap,
+            kind="integration_verification",
         )
         result.add_quantity(
             "training_loss_reduction",
@@ -111,6 +130,22 @@ class XDEMReferenceStep:
             )
             result.add_artifact("neural_field", field_path)
             result.add_artifact("model_state", weights_path)
+            integration_path = output / "integration_evidence.json"
+            integration_path.write_text(
+                json.dumps(integration_evidence.summary(), indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
+            result.add_artifact("integration_evidence", integration_path)
+            crack_geometry_path = output / "crack_geometry.json"
+            crack_geometry_path.write_text(
+                json.dumps(
+                    self.spec.metadata["geometry"]["cracks"],
+                    indent=2,
+                    sort_keys=True,
+                ),
+                encoding="utf-8",
+            )
+            result.add_artifact("crack_geometry", crack_geometry_path)
             result.add_field(
                 "W",
                 artifact=field_path,
@@ -123,6 +158,11 @@ class XDEMReferenceStep:
                     "coordinates_dataset": "coordinates",
                     "prediction_dataset": "prediction",
                     "reference_dataset": "reference",
+                    "discontinuity_representation": "paired_one_sided_samples",
+                    "crack_trace_coordinates_dataset": "crack_trace_coordinates",
+                    "crack_trace_side_dataset": "crack_trace_side",
+                    "crack_trace_prediction_dataset": "crack_trace_prediction",
+                    "crack_geometry_artifact": "crack_geometry",
                 },
             )
 
@@ -156,6 +196,15 @@ class XDEMReferenceStep:
                 "crack_face_traction_relative_error",
                 outcome.metrics["crack_face_traction_relative_error"],
                 0.15,
+            ),
+            _upper_bound_claim(
+                "independent_integration_consistency",
+                "maximum_independent_integration_gap",
+                max(
+                    integration_evidence.training_validation_gap,
+                    integration_evidence.refinement_gap or 0.0,
+                ),
+                integration_evidence.relative_tolerance,
             ),
         )
         finite = bool(np.all(np.isfinite(outcome.losses)))

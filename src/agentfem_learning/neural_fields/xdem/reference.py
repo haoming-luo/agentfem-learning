@@ -109,6 +109,10 @@ class ReferenceTrainingOutcome:
     coordinates: np.ndarray
     prediction: np.ndarray
     reference: np.ndarray
+    crack_trace_coordinates: np.ndarray
+    crack_trace_side: np.ndarray
+    crack_trace_prediction: np.ndarray
+    crack_trace_reference: np.ndarray
     metrics: Mapping[str, float]
     device: str
     dtype: str
@@ -121,6 +125,10 @@ class ReferenceTrainingOutcome:
             coordinates=self.coordinates,
             prediction=self.prediction,
             reference=self.reference,
+            crack_trace_coordinates=self.crack_trace_coordinates,
+            crack_trace_side=self.crack_trace_side,
+            crack_trace_prediction=self.crack_trace_prediction,
+            crack_trace_reference=self.crack_trace_reference,
         )
         return output
 
@@ -236,6 +244,17 @@ def train_mode_iii_reference(
                 )
 
     evaluation = _evaluation_grid(
+        count=_integration_rule(spec, "validation").count,
+        seed=_integration_rule(spec, "validation").seed,
+        radius=radius,
+        core=core,
+        dtype=dtype,
+        device=device,
+    )
+    refinement_rule = _integration_rule(spec, "refinement")
+    refined_evaluation = _evaluation_grid(
+        count=refinement_rule.count,
+        seed=refinement_rule.seed,
         radius=radius,
         core=core,
         dtype=dtype,
@@ -258,6 +277,21 @@ def train_mode_iii_reference(
         boundary_displacement=displacement,
         exact_energy=exact_energy,
         boundary_count=boundary_count,
+        training_energy=float(objective()[1].detach().cpu()),
+        refined_evaluation=refined_evaluation,
+    )
+    trace_coordinates, trace_side = _crack_trace_grid(
+        radius=radius,
+        core=core,
+        count=max(32, boundary_count // 2),
+        dtype=dtype,
+        device=device,
+    )
+    trace_prediction = model(trace_coordinates)
+    trace_reference = williams_mode_iii(
+        trace_coordinates,
+        radius=radius,
+        displacement=displacement,
     )
     return ReferenceTrainingOutcome(
         model=model,
@@ -266,6 +300,10 @@ def train_mode_iii_reference(
         coordinates=evaluation.detach().cpu().numpy(),
         prediction=prediction.detach().cpu().numpy(),
         reference=reference.detach().cpu().numpy(),
+        crack_trace_coordinates=trace_coordinates.detach().cpu().numpy(),
+        crack_trace_side=trace_side.detach().cpu().numpy(),
+        crack_trace_prediction=trace_prediction.detach().cpu().numpy(),
+        crack_trace_reference=trace_reference.detach().cpu().numpy(),
         metrics=metrics,
         device=str(device),
         dtype=options.dtype,
@@ -337,6 +375,20 @@ def _sample_counts(spec) -> tuple[int, int]:
     )
 
 
+def _integration_rule(spec, role: str):
+    plan = getattr(spec, "integration", None)
+    if plan is None:
+        raise ValueError(
+            "The XDEM reference requires an explicit IntegrationPlan with "
+            "independent validation and refinement rules."
+        )
+    if role == "validation":
+        return plan.validation
+    if role == "refinement" and plan.refinements:
+        return plan.refinements[-1]
+    raise ValueError(f"The XDEM reference has no integration rule for role {role!r}.")
+
+
 def _resolve_device(selected: str, *, dtype: str) -> torch.device:
     normalized = str(selected).strip().lower()
     if normalized == "auto":
@@ -395,17 +447,34 @@ def _sample_boundaries(count, *, radius, core, dtype, device):
     return torch.cat((outer, inner), dim=0).to(device)
 
 
-def _evaluation_grid(*, radius, core, dtype, device):
-    radial_count = 48
-    angular_count = 96
-    fractions = (torch.arange(radial_count, dtype=dtype) + 0.5) / radial_count
-    radial = torch.sqrt(core * core + fractions * (radius * radius - core * core))
-    angle = -pi + (torch.arange(angular_count, dtype=dtype) + 0.5) * (
-        2.0 * pi / angular_count
+def _evaluation_grid(*, count, seed, radius, core, dtype, device):
+    return _sample_annulus(
+        int(count),
+        radius=radius,
+        core=core,
+        seed=int(seed or 0),
+        dtype=dtype,
+        device=device,
     )
-    rr, tt = torch.meshgrid(radial, angle, indexing="ij")
-    coordinates = torch.stack((rr * torch.cos(tt), rr * torch.sin(tt)), dim=-1)
-    return coordinates.reshape(-1, 2).to(device).requires_grad_(True)
+
+
+def _crack_trace_grid(*, radius, core, count, dtype, device):
+    """Return paired one-sided samples without averaging the crack jump."""
+
+    radial = core + (torch.arange(int(count), dtype=dtype) + 0.5) * (
+        (radius - core) / int(count)
+    )
+    offset = 1.0e-6 * radius
+    upper = torch.stack((-radial, torch.full_like(radial, offset)), dim=1)
+    lower = torch.stack((-radial, torch.full_like(radial, -offset)), dim=1)
+    coordinates = torch.cat((upper, lower), dim=0).to(device)
+    side = torch.cat(
+        (
+            torch.ones(int(count), dtype=torch.int8),
+            -torch.ones(int(count), dtype=torch.int8),
+        )
+    ).to(device)
+    return coordinates, side
 
 
 def _verification_metrics(
@@ -420,6 +489,8 @@ def _verification_metrics(
     boundary_displacement,
     exact_energy,
     boundary_count,
+    training_energy,
+    refined_evaluation,
 ) -> dict[str, float]:
     difference = prediction - reference
     relative_l2 = torch.linalg.vector_norm(difference) / torch.linalg.vector_norm(reference)
@@ -433,6 +504,20 @@ def _verification_metrics(
     area = pi * (radius * radius - core * core)
     predicted_energy = 0.5 * shear_modulus * area * gradient.square().sum(dim=1).mean()
     energy_error = torch.abs(predicted_energy - exact_energy) / exact_energy
+    refined_prediction = model(refined_evaluation)
+    refined_gradient = torch.autograd.grad(
+        refined_prediction,
+        refined_evaluation,
+        grad_outputs=torch.ones_like(refined_prediction),
+        create_graph=False,
+        retain_graph=False,
+    )[0]
+    refined_energy = (
+        0.5
+        * shear_modulus
+        * area
+        * refined_gradient.square().sum(dim=1).mean()
+    )
 
     boundary = _sample_boundaries(
         boundary_count,
@@ -497,6 +582,8 @@ def _verification_metrics(
         "crack_jump_relative_error": float(jump_error.detach().cpu()),
         "crack_face_traction_relative_error": float(traction_error.detach().cpu()),
         "predicted_energy": float(predicted_energy.detach().cpu()),
+        "training_integral_energy": float(training_energy),
+        "refined_integral_energy": float(refined_energy.detach().cpu()),
         "reference_energy": float(exact_energy),
         "learned_tip_amplitude": float(model.tip_amplitude.detach().cpu()),
     }

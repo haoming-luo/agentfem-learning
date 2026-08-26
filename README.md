@@ -41,7 +41,9 @@ crack growth, phase-field fracture, or experimental validation.
   not allowed to introduce autograd-invisible internal discontinuities.
 
 The accepted reference checks cover the displacement field, prescribed
-boundaries, strain energy, crack opening jump, and crack-face traction.
+boundaries, strain energy, crack opening jump, crack-face traction, and
+independent integration consistency. The field artifact preserves paired
+one-sided crack-face samples instead of averaging the discontinuity away.
 
 ## Why a companion project
 
@@ -64,7 +66,9 @@ agentfem_learning
 ```
 
 See the [development roadmap](docs/roadmap.md) for the evidence required before
-new providers or maturity claims are added.
+new providers or maturity claims are added. The method-neutral fracture/XDEM
+boundary is specified in the
+[fracture-field contract](https://github.com/haoming-luo/agentfem-learning/blob/main/docs/xdem_fracture_contract.md).
 
 ## Installation during development
 
@@ -140,6 +144,8 @@ The output directory contains:
 
 - `result.json`: portable AgentFEM result and verification manifest;
 - `mode_iii_field.npz`: coordinates, prediction, and analytical reference;
+- `crack_geometry.json`: stable crack and crack-tip identity;
+- `integration_evidence.json`: training, held-out, and refined integration;
 - `model_state.pt`: PyTorch state dictionary and scientific specification.
 
 ## Architectural boundary

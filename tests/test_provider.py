@@ -64,13 +64,26 @@ def test_neural_field_step_returns_verified_simulation_result(tmp_path, monkeypa
     assert result.quantity("relative_l2_error") < 0.08
     assert result.quantity("relative_energy_error") < 0.10
     assert result.quantity("crack_jump_relative_error") < 0.10
+    assert result.quantity("training_validation_integration_gap") < 0.05
+    assert result.quantity("validation_refinement_integration_gap") < 0.05
     assert result.field("W") is None
     assert (output / "mode_iii_field.npz").is_file()
     assert (output / "model_state.pt").is_file()
+    assert (output / "integration_evidence.json").is_file()
+    assert (output / "crack_geometry.json").is_file()
+    with np.load(output / "mode_iii_field.npz") as field:
+        sides = field["crack_trace_side"]
+        trace = field["crack_trace_prediction"].reshape(-1)
+    assert set(sides.tolist()) == {-1, 1}
+    half = trace.size // 2
+    assert np.max(np.abs(trace[:half] - trace[half:])) > 1.0e-2
     manifest_path = output / "result.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest["trust_level"] == "verified"
     assert manifest["metadata"]["provider"] == "agentfem-learning.xdem"
     assert manifest["artifacts"]["neural_field"] == "mode_iii_field.npz"
+    assert manifest["artifacts"]["integration_evidence"] == "integration_evidence.json"
+    assert manifest["artifacts"]["crack_geometry"] == "crack_geometry.json"
+    assert manifest["metadata"]["integration_evidence"]["status"] == "accepted"
     assert provenance.verify_manifest(manifest_path).verified is True
     assert step.solve_result() is result

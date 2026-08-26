@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agentfem import learning
+from agentfem import fracture, learning
 
 
 def mode_iii_tip_spec(
@@ -35,6 +35,53 @@ def mode_iii_tip_spec(
         raise ValueError("shear_modulus must be positive.")
     if boundary_displacement == 0.0:
         raise ValueError("boundary_displacement must be nonzero.")
+
+    cracks = fracture.crack_set(
+        fracture.segment(
+            "branch_cut",
+            start=(-radius, 0.0),
+            end=(0.0, 0.0),
+            metadata={"role": "traction_free_branch_cut"},
+        ),
+        name="mode_iii_reference_crack",
+    )
+    integration = learning.IntegrationPlan(
+        training=learning.IntegrationRule(
+            name="slit_annulus_energy_points",
+            role="training",
+            strategy="xdem:tensor_midpoint",
+            count=int(domain_samples),
+            seed=2026,
+            implementation="agentfem_learning.neural_fields.xdem:annulus_midpoints",
+        ),
+        validation=learning.IntegrationRule(
+            name="slit_annulus_validation_points",
+            role="validation",
+            strategy="xdem:tensor_midpoint",
+            count=48 * 96,
+            seed=3026,
+            independent_of=("slit_annulus_energy_points",),
+            implementation="agentfem_learning.neural_fields.xdem:annulus_midpoints",
+        ),
+        refinements=(
+            learning.IntegrationRule(
+                name="slit_annulus_refined_points",
+                role="refinement",
+                strategy="xdem:tensor_midpoint",
+                count=72 * 144,
+                seed=4026,
+                independent_of=(
+                    "slit_annulus_energy_points",
+                    "slit_annulus_validation_points",
+                ),
+                implementation="agentfem_learning.neural_fields.xdem:annulus_midpoints",
+            ),
+        ),
+        metadata={
+            "purpose": "independent_energy_reintegration",
+            "coordinate_system": "reference_cartesian",
+        },
+    )
 
     displacement = learning.FieldEncoding(
         name="anti_plane_displacement",
@@ -110,6 +157,7 @@ def mode_iii_tip_spec(
                 seed=2027,
             ),
         ),
+        integration=integration,
         purpose="forward",
         required_checks=(
             "independent_reference_error",
@@ -126,7 +174,8 @@ def mode_iii_tip_spec(
                 "kind": "slit_annulus",
                 "radius": radius,
                 "tip_core_radius": tip_core_radius,
-                "crack": "negative_x_axis_branch_cut",
+                "cracks": cracks.summary(),
+                "crack_fingerprint": cracks.fingerprint,
             },
             "material": {"shear_modulus": shear_modulus},
             "loading": {"boundary_displacement": boundary_displacement},
