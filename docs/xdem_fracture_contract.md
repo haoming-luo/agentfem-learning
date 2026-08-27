@@ -76,11 +76,14 @@ enter training and acceptance still uses independently extracted SIFs.
 
 The published `NN(x, rho)` crack-coordinate architecture and an
 AgentFEM-Learning bounded-sheet variant are retained as internal, tested
-representation candidates. Neither is the default. In the Griffith diagnostic,
-the published distance-decay coordinate produced a large crack-face stress
-layer, while smoothing or removing that decay did not improve the independent
-SIF checks. These negative results prevent a literature-derived mechanism from
-being promoted merely because it trains.
+representation candidates. In the Griffith diagnostic, the published
+distance-decay coordinate produced a large crack-face stress layer, while
+smoothing or removing that decay did not improve the independent SIF checks.
+The centered-crack promotion candidate instead uses an analytic two-sheet
+coordinate based on `sqrt(z^2-a^2)`. Its two traces differ only on the declared
+finite crack and merge around both endpoints without a prescribed normal
+transition layer. General problems retain the additive representation until
+the two-sheet route passes the complete promotion gate.
 
 Spatial essential data are serialized as a named field family rather than a
 live callback. For a complete rectangular boundary, the trial field is
@@ -109,13 +112,14 @@ single extractor from certifying an inconsistent field.
 The published-reference gate additionally requires crack-face traction and
 bulk-equilibrium residuals below their declared limits. The latest
 traction-driven Griffith diagnostic additionally resolves grid-aligned crack
-faces and tips. Under the fixed training budget it raised normalized `K_I` to
-about 0.69, reduced maximum path variation to about 8.6%, and reduced extractor
-disagreement to about 38%. Crack-face traction and bulk equilibrium still
-failed their declared limits, so this remains a sharper formulation diagnosis,
-not a promotion result. Channel-resolved evidence identifies the continuous
-mean field, rather than the Williams term, as the dominant source of remaining
-face traction. The public hard-boundary Mode-I/II extended patch passes with
+faces and tips and uses the analytic two-sheet coordinate. Under the fixed
+training budget it raised normalized `K_I` to about 0.84, reduced maximum path
+variation to about 1.0%, and reduced extractor disagreement to about 28%.
+Crack-face traction remained about 75%; bulk equilibrium was about 9.5%.
+Consequently this is a substantial formulation improvement but still not a
+promotion result. Channel-resolved evidence continues to identify the neural
+field, rather than the Williams term, as the dominant source of remaining face
+traction. The public hard-boundary Mode-I/II extended patch passes with
 one active tip and is classified as patch evidence. A traction-free
 discontinuous-trial-space correction remains the next predictive gate. A
 crack-face penalty was tested and rejected as a default because it reduced the

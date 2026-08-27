@@ -149,9 +149,9 @@ def test_point_gauges_remove_rigid_modes_without_clamping_remote_boundaries(tmp_
         displacement_scale=1.0e6 * 24.0 / 210.0e9,
         hidden_layers=(8,),
     )
-    assert network.representation_family == "additive_jump"
-    assert len(network.jump_networks) == 1
-    assert network.regular_network[0].in_features == 2
+    assert network.representation_family == "riemann_sheet_coordinate"
+    assert len(network.jump_networks) == 0
+    assert network.regular_network[0].in_features == 4
     assert network.has_hard_point_gauge is True
     assert network.tip_amplitudes[:, 0].detach().numpy() == pytest.approx(
         np.sqrt(np.pi / 2.0)
@@ -167,7 +167,7 @@ def test_point_gauges_remove_rigid_modes_without_clamping_remote_boundaries(tmp_
     )
     sample = torch.tensor(((0.0, 0.25), (0.5, -0.25)), dtype=torch.float64)
     components = network.raw_displacement_components(sample)
-    assert set(components) == {"regular_network", "jump_network", "williams_tip"}
+    assert set(components) == {"crack_coordinate_network", "williams_tip"}
     assert torch.allclose(sum(components.values()), network._raw_displacement(sample))
     smoke = train_finite_domain(
         finite_domain_spec(single, domain_samples=128, boundary_samples=16),
@@ -268,6 +268,59 @@ def test_published_crack_coordinate_is_segment_local_and_scale_invariant():
     bounded = network.bounded_sheet_coordinates(face)[:, 0]
     normal_derivative = torch.autograd.grad(bounded.sum(), face)[0][0, 1]
     assert normal_derivative == pytest.approx(0.0, abs=1.0e-14)
+
+
+def test_riemann_sheet_coordinate_is_double_valued_only_on_finite_crack():
+    material = _material()
+    base = center_crack_domain_problem(
+        material,
+        half_crack_length=1.0,
+        half_width=4.0,
+        half_height=4.0,
+        remote_stress=1.0,
+    )
+    problem = static_crack_problem(
+        domain=base.domain,
+        material=base.material,
+        cracks=base.cracks,
+        conditions=base.conditions,
+        metadata={"neural_representation": "riemann_sheet_coordinate"},
+    )
+    network = FiniteDomainVectorNetwork(
+        problem,
+        displacement_scale=1.0e-6,
+        hidden_layers=(8,),
+    )
+    epsilon = 1.0e-8
+    points = torch.tensor(
+        (
+            (0.0, epsilon),
+            (0.0, -epsilon),
+            (2.0, epsilon),
+            (2.0, -epsilon),
+        ),
+        dtype=torch.float64,
+    )
+    mapped = network.riemann_sheet_coordinates(points)
+
+    assert mapped[0, 0] == pytest.approx(0.0, abs=1.0e-8)
+    assert mapped[0, 1] == pytest.approx(1.0, rel=1.0e-7)
+    assert mapped[1, 1] == pytest.approx(-1.0, rel=1.0e-7)
+    assert mapped[2, 0] == pytest.approx(np.sqrt(3.0), rel=1.0e-7)
+    assert mapped[3, 0] == pytest.approx(np.sqrt(3.0), rel=1.0e-7)
+    assert mapped[2, 1] == pytest.approx(-mapped[3, 1], rel=1.0e-7)
+    assert abs(float(mapped[2, 1])) < 2.0e-8
+    assert network.regular_network[0].in_features == 4
+
+    special = torch.tensor(
+        ((-1.0, 0.0), (1.0, 0.0), (2.0, 0.0), (0.0, 0.25)),
+        dtype=torch.float64,
+        requires_grad=True,
+    )
+    special_mapped = network.riemann_sheet_coordinates(special)
+    gradient = torch.autograd.grad(special_mapped.sum(), special)[0]
+    assert torch.all(torch.isfinite(special_mapped))
+    assert torch.all(torch.isfinite(gradient))
 
 
 def test_published_crack_coordinate_supports_multiple_oriented_segments():

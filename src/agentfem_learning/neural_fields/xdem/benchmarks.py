@@ -272,6 +272,10 @@ def center_crack_domain_problem(
         metadata={
             "reference": griffith_center_crack_reference().summary(),
             "reference_scale": stress * sqrt(pi * a),
+            "neural_representation": "riemann_sheet_coordinate",
+            "representation_reference": (
+                "analytic two-sheet square-root coordinate for a finite crack"
+            ),
         },
     )
 

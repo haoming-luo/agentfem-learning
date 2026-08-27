@@ -167,14 +167,17 @@ def _initial_tip_amplitudes(problem, *, stress_scale: float, dtype):
 _ADDITIVE_JUMP_REPRESENTATION = "additive_jump"
 _PUBLISHED_CRACK_COORDINATE_REPRESENTATION = "published_crack_coordinate"
 _BOUNDED_SHEET_COORDINATE_REPRESENTATION = "bounded_sheet_coordinate"
+_RIEMANN_SHEET_COORDINATE_REPRESENTATION = "riemann_sheet_coordinate"
 _SUPPORTED_REPRESENTATIONS = {
     _ADDITIVE_JUMP_REPRESENTATION,
     _PUBLISHED_CRACK_COORDINATE_REPRESENTATION,
     _BOUNDED_SHEET_COORDINATE_REPRESENTATION,
+    _RIEMANN_SHEET_COORDINATE_REPRESENTATION,
 }
 _CRACK_COORDINATE_REPRESENTATIONS = {
     _PUBLISHED_CRACK_COORDINATE_REPRESENTATION,
     _BOUNDED_SHEET_COORDINATE_REPRESENTATION,
+    _RIEMANN_SHEET_COORDINATE_REPRESENTATION,
 }
 
 
@@ -333,11 +336,12 @@ class FiniteDomainVectorNetwork(torch.nn.Module):
                 dtype=dtype,
             )
         )
-        input_width = (
-            2 + len(problem.cracks.cracks)
-            if self.representation_family in _CRACK_COORDINATE_REPRESENTATIONS
-            else 2
-        )
+        if self.representation_family == _RIEMANN_SHEET_COORDINATE_REPRESENTATION:
+            input_width = 2 + 2 * len(problem.cracks.cracks)
+        elif self.representation_family in _CRACK_COORDINATE_REPRESENTATIONS:
+            input_width = 2 + len(problem.cracks.cracks)
+        else:
+            input_width = 2
         self.regular_network = _vector_mlp(
             hidden_layers, input_width=input_width, dtype=dtype
         )
@@ -464,6 +468,47 @@ class FiniteDomainVectorNetwork(torch.nn.Module):
         side = torch.where(normal >= 0.0, 1.0, -1.0)
         return side * endpoint_window
 
+    def riemann_sheet_coordinates(self, coordinates: torch.Tensor) -> torch.Tensor:
+        """Return analytic two-sheet coordinates for finite straight cracks.
+
+        For local ``z=s+i*n`` and half crack length ``a``, this evaluates the
+        real and imaginary parts of the branch ``sqrt(z**2-a**2)`` that behaves
+        like ``z`` at infinity.  The two traces differ only on ``|s|<a, n=0``
+        and merge continuously around both endpoints.  Unlike a localized
+        Heaviside feature, this coordinate introduces no prescribed transition
+        layer or discontinuity on the infinite crack extension.
+        """
+
+        relative = coordinates[:, None, :] - self.crack_centers[None, :, :]
+        along = torch.einsum("nci,ci->nc", relative, self.crack_tangents)
+        normal = torch.einsum("nci,ci->nc", relative, self.crack_normals)
+        half_length = 0.5 * self.crack_lengths[None, :]
+        scaled_along = along / half_length
+        scaled_normal = normal / half_length
+        real_part = scaled_along.square() - scaled_normal.square() - 1.0
+        imaginary_part = 2.0 * scaled_along * scaled_normal
+        epsilon = torch.as_tensor(
+            1.0e-24, dtype=coordinates.dtype, device=coordinates.device
+        )
+        magnitude = torch.sqrt(
+            real_part.square() + imaginary_part.square() + epsilon.square()
+        )
+        floor = torch.sqrt(epsilon)
+
+        def safe_zero_sqrt(value):
+            return torch.sqrt(torch.clamp(value, min=epsilon)) - floor
+
+        mapped_real = torch.where(along >= 0.0, 1.0, -1.0) * safe_zero_sqrt(
+            0.5 * (magnitude + real_part)
+        )
+        mapped_imaginary = torch.where(
+            normal >= 0.0, 1.0, -1.0
+        ) * safe_zero_sqrt(0.5 * (magnitude - real_part))
+        normalized = torch.stack(
+            (mapped_real, mapped_imaginary), dim=2
+        )
+        return normalized.reshape(len(coordinates), -1)
+
     def crack_features(self, coordinates: torch.Tensor) -> torch.Tensor:
         """Return the crack coordinates used by the selected representation."""
 
@@ -473,6 +518,8 @@ class FiniteDomainVectorNetwork(torch.nn.Module):
             self.representation_family == _BOUNDED_SHEET_COORDINATE_REPRESENTATION
         ):
             return self.bounded_sheet_coordinates(coordinates)
+        if self.representation_family == _RIEMANN_SHEET_COORDINATE_REPRESENTATION:
+            return self.riemann_sheet_coordinates(coordinates)
         return self.additive_jump_features(coordinates)
 
     def tip_features(self, coordinates: torch.Tensor) -> torch.Tensor:

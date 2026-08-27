@@ -655,12 +655,12 @@ def finite_domain_spec(
     representation_family = str(
         problem.metadata.get("neural_representation", "additive_jump")
     )
-    representation_features = (
-        ("coordinates", "published_crack_coordinates")
-        if representation_family
-        in {"published_crack_coordinate", "bounded_sheet_coordinate"}
-        else ("coordinates", "crack_jump_functions")
-    )
+    crack_feature = {
+        "published_crack_coordinate": "published_crack_coordinates",
+        "bounded_sheet_coordinate": "bounded_sheet_coordinates",
+        "riemann_sheet_coordinate": "riemann_sheet_coordinates",
+    }.get(representation_family, "crack_jump_functions")
+    representation_features = ("coordinates", crack_feature)
     return learning.NeuralFieldSpec(
         fields=(displacement,),
         objectives=(

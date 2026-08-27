@@ -108,14 +108,15 @@ path-independence, crack-face traction, and bulk-equilibrium acceptance. The
 spatial hard-Dirichlet and active-tip milestone is now implemented. The
 published X-VEM problem is intentionally classified as an extended patch test
 because its analytic field supplies the essential boundary data and admissible
-interior lifting. LEFM-compatible internal-crack closure plus aligned face/tip
-integration raised the Griffith diagnostic to normalized `K_I` about 0.69 and
-lowered path variation to about 8.6%, but did not pass extractor agreement,
-crack-face traction, or bulk-equilibrium gates. Published and regularized
-crack-coordinate input forms were also executed and rejected as defaults. The
-next milestone is therefore a traction-free discontinuous-trial-space
-correction, then domain-size convergence toward Griffith without an analytic
-interior field, followed by the four-tip collinear-crack reference.
+interior lifting. Aligned face/tip integration and an analytic finite-crack
+two-sheet coordinate raised the Griffith diagnostic to normalized `K_I` about
+0.84 and lowered path variation to about 1.0%. Extractor disagreement fell to
+about 28%, but crack-face traction remained about 75%, so the gate remains
+closed. Published distance-decay and bounded-sheet input forms were also
+executed and rejected as defaults. The next milestone is high-budget and
+domain-size convergence of the analytic two-sheet candidate, followed by a
+traction-free correction that does not suppress the physical crack response,
+then the four-tip collinear-crack reference.
 
 Registering a reference is not a solver pass. The single-crack reference uses
 Benvenuti et al.'s public mixed-mode X-VEM problem and preserves its boundary
