@@ -34,7 +34,9 @@ core `model.step(target=spec, executor=...)` boundary.
   active tip, exact spatial Dirichlet enforcement, independently extracted
   `K_I/K_II`, and physics-quality checks. It is patch-test evidence, not a
   predictive finite-domain validation; the traction-driven Griffith limit
-  remains the next solver gate.
+  remains the next solver gate. A topology-aware cut-cell rule now gives every
+  training, validation, and refinement point an explicit crack-side identity,
+  preserves area, and records independent grid fingerprints.
 - **Milestone B -- static multi-crack fields (experimental solver
   implemented):** mutually separated internal straight cracks now enter one
   joint energy solve. Crack and tip identities are stable, integration radii
@@ -92,6 +94,7 @@ diagnostic evidence, not a benchmark pass.
 |---|---|---|
 | finite-domain mixed Mode I/II | public extended patch test accepted | hard spatial boundary, one active tip, `K_I/K_II`, path, traction and equilibrium checks pass; classified as patch evidence |
 | interacting two-crack field | exact four-tip collinear reference registered | one result must reproduce all four tips; no averaging across tips |
+| cut-domain integration | implemented and regression-tested | area-conserving regular/cut/tip cells, one-sided point identity, distinct training/validation/refinement fingerprints |
 | multi-axis numerical stability | executable bounded-memory audit | network, quadrature, seed, and ring axes must each pass |
 | discontinuous visualization | implemented and regression-tested | one VTU, duplicated crack-face nodes, explicit `CrackSide` and `CrackId` |
 | independent SIF cross-check | implemented and regression-tested | interaction integral and zero-radius COD extrapolation must agree within the declared internal contract |
@@ -105,9 +108,12 @@ path-independence, crack-face traction, and bulk-equilibrium acceptance. The
 spatial hard-Dirichlet and active-tip milestone is now implemented. The
 published X-VEM problem is intentionally classified as an extended patch test
 because its analytic field supplies the essential boundary data and admissible
-interior lifting. The next milestone is therefore domain-size convergence
-toward Griffith without an analytic interior field, followed by the four-tip
-collinear-crack reference.
+interior lifting. LEFM-compatible internal-crack closure and cut-domain
+quadrature lowered the Griffith path variation to about 15%, but did not pass
+the SIF, extractor-agreement, or crack-face-traction gates. The next milestone
+is therefore an explicit crack-surface variational treatment, then domain-size
+convergence toward Griffith without an analytic interior field, followed by
+the four-tip collinear-crack reference.
 
 Registering a reference is not a solver pass. The single-crack reference uses
 Benvenuti et al.'s public mixed-mode X-VEM problem and preserves its boundary

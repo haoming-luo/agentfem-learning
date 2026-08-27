@@ -10,6 +10,7 @@ import numpy as np
 import torch
 from agentfem import fracture
 
+from .cut_domain import straight_crack_cut_quadrature
 from .finite_domain import (
     PointDisplacementCondition2D,
     SpatialDisplacementCondition2D,
@@ -233,6 +234,17 @@ class FiniteDomainVectorNetwork(torch.nn.Module):
             "crack_lengths",
             torch.tensor([item.length for item in problem.cracks.cracks], dtype=dtype),
         )
+        self.register_buffer(
+            "crack_has_two_active_tips",
+            torch.tensor(
+                [
+                    set(item.metadata.get("active_ends", ("start", "end")))
+                    == {"start", "end"}
+                    for item in problem.cracks.cracks
+                ],
+                dtype=torch.bool,
+            ),
+        )
         self.active_tip_ids = problem.active_tip_ids
         self.register_buffer(
             "tip_points",
@@ -345,7 +357,18 @@ class FiniteDomainVectorNetwork(torch.nn.Module):
         along = torch.einsum("nci,ci->nc", relative, self.crack_tangents)
         normal = torch.einsum("nci,ci->nc", relative, self.crack_normals)
         half_length = 0.5 * self.crack_lengths[None, :]
-        window = torch.relu(1.0 - (along / half_length).square()).square()
+        closure = 1.0 - (along / half_length).square()
+        lefm_window = torch.where(
+            closure > 0.0,
+            torch.sqrt(torch.clamp(closure, min=1.0e-12)),
+            torch.zeros_like(closure),
+        )
+        smooth_window = torch.relu(closure).square()
+        window = torch.where(
+            self.crack_has_two_active_tips[None, :],
+            lefm_window,
+            smooth_window,
+        )
         sign = torch.where(normal >= 0.0, 1.0, -1.0)
         # A |normal|-exponential has a cusp at the crack face.  Its nonzero
         # one-sided derivative lets the network manufacture a vanishing face
@@ -553,6 +576,7 @@ class FiniteDomainTrainingOutcome:
     metrics: dict[str, float]
     stress_intensity: object
     crack_opening_stress_intensity: tuple[object, ...]
+    quadrature_topology: dict[str, object]
     device: str
     dtype: str
 
@@ -617,14 +641,14 @@ def train_finite_domain(
         dtype=dtype,
     ).to(device)
     rules = spec.integration
-    training_quadrature = _tensor_domain_quadrature(
+    training_quadrature, training_topology = _cut_domain_quadrature(
         problem,
         rules.training.count,
         seed=rules.training.seed,
         dtype=dtype,
         device=device,
     )
-    validation_quadrature = _tensor_domain_quadrature(
+    validation_quadrature, validation_topology = _cut_domain_quadrature(
         problem,
         rules.validation.count,
         seed=rules.validation.seed,
@@ -632,7 +656,7 @@ def train_finite_domain(
         device=device,
     )
     refinement = rules.refinements[0]
-    refined_quadrature = _tensor_domain_quadrature(
+    refined_quadrature, refined_topology = _cut_domain_quadrature(
         problem,
         refinement.count,
         seed=refinement.seed,
@@ -827,6 +851,13 @@ def train_finite_domain(
             abs(float(training_quadrature[1].sum().detach().cpu()) - problem.domain.area)
             / problem.domain.area
         ),
+        "training_cut_or_tip_point_fraction": float(
+            sum(
+                kind in {"cut", "tip", "one_sided"}
+                for kind in training_topology.cell_kinds
+            )
+            / len(training_topology.cell_kinds)
+        ),
         "maximum_sif_extractor_disagreement": float(
             max(
                 np.linalg.norm(
@@ -861,6 +892,11 @@ def train_finite_domain(
         metrics=metrics,
         stress_intensity=reports,
         crack_opening_stress_intensity=opening_reports,
+        quadrature_topology={
+            "training": training_topology.summary(),
+            "validation": validation_topology.summary(),
+            "refinement": refined_topology.summary(),
+        },
         device=str(device),
         dtype=options.dtype,
     )
@@ -1105,6 +1141,17 @@ def _tensor_domain_quadrature(problem, count, *, seed, dtype, device):
         device=device,
     )
     return coordinates.detach().requires_grad_(True), weights
+
+
+def _cut_domain_quadrature(problem, count, *, seed, dtype, device):
+    """Convert provider-neutral cut-cell evidence to differentiable tensors."""
+
+    topology = straight_crack_cut_quadrature(problem, count, variant=seed)
+    coordinates = torch.as_tensor(
+        topology.coordinates, dtype=dtype, device=device
+    ).detach().requires_grad_(True)
+    weights = torch.as_tensor(topology.weights, dtype=dtype, device=device)
+    return (coordinates, weights), topology
 
 
 def _evaluation_grid(problem, count, *, dtype, device):

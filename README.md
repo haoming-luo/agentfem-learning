@@ -31,6 +31,9 @@ evidence on the same slit annulus. An experimental finite-domain XDEM-D
 provider additionally accepts rectangular domains, constant displacement and
 traction boundaries, spatial hard Dirichlet data, multiple separated straight
 cracks, and an inactive boundary crack mouth with explicit active-tip identity.
+Its area-conserving cut-domain quadrature records the side of every straight
+crack at every integration point and keeps training, validation, and refinement
+rules independently fingerprinted.
 The public mixed-mode X-VEM extended patch test is accepted; it verifies exact
 boundary enforcement, enrichment reproduction, and independent SIF/J
 extraction, not predictive crack interaction. These capabilities do not claim

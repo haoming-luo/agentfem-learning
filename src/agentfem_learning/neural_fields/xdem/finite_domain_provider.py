@@ -104,6 +104,7 @@ class XDEMFiniteDomainStep:
                     item.summary()
                     for item in outcome.crack_opening_stress_intensity
                 ],
+                "quadrature_topology": outcome.quadrature_topology,
                 "tip_enrichment": {
                     "parameterization": (
                         "scientific_boundary_or_load_initialized_trainable_"

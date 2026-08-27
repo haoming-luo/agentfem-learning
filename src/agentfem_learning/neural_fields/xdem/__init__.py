@@ -22,6 +22,11 @@ from .convergence import (
     run_convergence_slices,
     run_finite_domain_convergence,
 )
+from .cut_domain import (
+    CutDomainQuadrature2D,
+    UnsupportedCutCellError,
+    straight_crack_cut_quadrature,
+)
 from .finite_domain import (
     PointDisplacementCondition2D,
     RectangularDomain2D,
@@ -68,6 +73,7 @@ __all__ = [
     "XDEM_REFERENCE_PROVIDER",
     "XDEM_VECTOR_PROVIDER",
     "CrackOpeningSIFReport2D",
+    "CutDomainQuadrature2D",
     "FiniteDomainTrainingOutcome",
     "FiniteDomainVectorNetwork",
     "MultiTipStressIntensityReport2D",
@@ -80,6 +86,7 @@ __all__ = [
     "StaticXDEMProblem2D",
     "TipIntegrationPlan2D",
     "TorchVectorFractureField",
+    "UnsupportedCutCellError",
     "UnsupportedFiniteDomainError",
     "VectorBoundaryCondition2D",
     "WilliamsModeIIINetwork",
@@ -104,6 +111,7 @@ __all__ = [
     "run_finite_domain_convergence",
     "spatial_displacement_bc",
     "static_crack_problem",
+    "straight_crack_cut_quadrature",
     "stress_intensity_reports",
     "tip_integration_plan",
     "traction_bc",

@@ -49,16 +49,24 @@ Every energy solve distinguishes:
 3. one or more refinement rules;
 4. boundary, jump, traction, and applicable physics-balance checks.
 
-The executable provider uses a deterministic tensor-product midpoint rule for
-the default training integral and different resolutions for validation and
-refinement. A crack-tip-stratified Monte Carlo rule remains an implementation
-experiment, not the default: fixed random clouds were observed to admit low
-training energy with a materially different held-out energy. Quadrature
-weights always sum to the physical domain area.
+The executable provider uses deterministic, topology-aware cut-cell rules.
+Ordinary cells use midpoint integration, cells crossed by a straight crack are
+clipped into two one-sided polygons, and cells containing a crack tip receive
+a symmetric local rule without silently extending the crack through the cell.
+Every point carries one side code per crack, and quadrature weights sum to the
+physical domain area. Training, held-out validation, and refinement use
+different deterministic grid variants and retain distinct fingerprints. If a
+coarse cell intersects more than one crack, the provider fails and requests
+integration refinement instead of guessing the topology. A crack-tip-
+stratified Monte Carlo rule remains an implementation experiment: fixed random
+clouds were observed to admit low training energy with a materially different
+held-out energy.
 
 The approximation is explicitly additive: a continuous mean field, one
 two-sided jump network per crack, and one trainable Williams field per active
-tip. Square-root features are not also fed through the mean network. Complete
+tip. A fully internal straight crack uses an LEFM-compatible elliptical jump
+closure at its two active tips; a boundary crack retains a separate mouth/tip
+contract. Square-root features are not also fed through the mean network. Complete
 point gauges are imposed by an exact zero-strain rigid-motion projection rather
 than a local penalty. Load-derived nominal SIFs may initialize the Williams
 coefficients as a numerical preconditioner, but published target values never
@@ -89,13 +97,16 @@ claim; agreement does not prove correctness, but disagreement prevents a
 single extractor from certifying an inconsistent field.
 
 The published-reference gate additionally requires crack-face traction and
-bulk-equilibrium residuals below their declared limits. A 3,000-epoch
-traction-driven Griffith diagnostic stabilized at a wrong SIF with large path
-variation; it therefore remains recorded as a formulation failure, not a
-promotion result. The public hard-boundary Mode-I/II extended patch now passes
-with one active tip and is classified as patch evidence. Griffith domain-size
-convergence remains the next predictive gate, followed by the interacting
-four-tip case.
+bulk-equilibrium residuals below their declared limits. The latest
+traction-driven Griffith diagnostic uses LEFM-compatible jump closure and the
+cut-domain rule. It reduced the maximum interaction-integral path variation to
+about 15%, but normalized `K_I` remained about 0.65, the independent SIF
+extractors still differed by about 53%, and crack-face traction remained
+unacceptable. It is therefore a sharper formulation diagnosis, not a
+promotion result. The public hard-boundary Mode-I/II extended patch passes
+with one active tip and is classified as patch evidence. An explicit
+crack-surface variational treatment remains the next predictive gate, followed
+by Griffith domain-size convergence and the interacting four-tip case.
 
 ## Discontinuous output
 
