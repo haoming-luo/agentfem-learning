@@ -149,6 +149,9 @@ def test_point_gauges_remove_rigid_modes_without_clamping_remote_boundaries(tmp_
         displacement_scale=1.0e6 * 24.0 / 210.0e9,
         hidden_layers=(8,),
     )
+    assert network.representation_family == "additive_jump"
+    assert len(network.jump_networks) == 1
+    assert network.regular_network[0].in_features == 2
     assert network.has_hard_point_gauge is True
     assert network.tip_amplitudes[:, 0].detach().numpy() == pytest.approx(
         np.sqrt(np.pi / 2.0)
@@ -162,6 +165,10 @@ def test_point_gauges_remove_rigid_modes_without_clamping_remote_boundaries(tmp_
         atol=1.0e-13,
         rtol=0.0,
     )
+    sample = torch.tensor(((0.0, 0.25), (0.5, -0.25)), dtype=torch.float64)
+    components = network.raw_displacement_components(sample)
+    assert set(components) == {"regular_network", "jump_network", "williams_tip"}
+    assert torch.allclose(sum(components.values()), network._raw_displacement(sample))
     smoke = train_finite_domain(
         finite_domain_spec(single, domain_samples=128, boundary_samples=16),
         ReferenceTrainingOptions(
@@ -202,6 +209,102 @@ def test_point_gauges_remove_rigid_modes_without_clamping_remote_boundaries(tmp_
                 point_displacement("rotation", (2.0, -2.0), (None, 0.0)),
             ),
         )
+
+
+def test_published_crack_coordinate_is_segment_local_and_scale_invariant():
+    material = _material()
+    problem = center_crack_domain_problem(
+        material,
+        half_crack_length=1.0,
+        half_width=4.0,
+        half_height=4.0,
+        remote_stress=1.0,
+    )
+    network = FiniteDomainVectorNetwork(
+        problem,
+        displacement_scale=1.0e-6,
+        hidden_layers=(8,),
+        crack_decay=8.0,
+    )
+    epsilon = 1.0e-8
+    points = torch.tensor(
+        (
+            (0.0, epsilon),
+            (0.0, -epsilon),
+            (1.25, epsilon),
+            (-1.25, -epsilon),
+            (1.0, epsilon),
+        ),
+        dtype=torch.float64,
+    )
+    coordinate = network.published_crack_coordinates(points)[:, 0]
+
+    assert coordinate[0] == pytest.approx(1.0, rel=1.0e-6)
+    assert coordinate[1] == pytest.approx(-1.0, rel=1.0e-6)
+    assert coordinate[2:] == pytest.approx(0.0, abs=0.0)
+
+    scaled = center_crack_domain_problem(
+        material,
+        half_crack_length=10.0,
+        half_width=40.0,
+        half_height=40.0,
+        remote_stress=1.0,
+    )
+    scaled_network = FiniteDomainVectorNetwork(
+        scaled,
+        displacement_scale=1.0e-6,
+        hidden_layers=(8,),
+        crack_decay=8.0,
+    )
+    sample = torch.tensor(((0.35, 0.2),), dtype=torch.float64)
+    assert torch.allclose(
+        network.published_crack_coordinates(sample),
+        scaled_network.published_crack_coordinates(10.0 * sample),
+        atol=1.0e-14,
+        rtol=1.0e-13,
+    )
+
+    face = torch.tensor(((0.25, 0.0),), dtype=torch.float64, requires_grad=True)
+    bounded = network.bounded_sheet_coordinates(face)[:, 0]
+    normal_derivative = torch.autograd.grad(bounded.sum(), face)[0][0, 1]
+    assert normal_derivative == pytest.approx(0.0, abs=1.0e-14)
+
+
+def test_published_crack_coordinate_supports_multiple_oriented_segments():
+    problem = static_crack_problem(
+        domain=rectangular_domain((-4.0, 4.0, -4.0, 4.0)),
+        material=_material(),
+        cracks=fracture.crack_set(
+            fracture.segment("horizontal", start=(-1.0, -1.0), end=(1.0, -1.0)),
+            fracture.segment("diagonal", start=(-1.0, 0.0), end=(1.0, 2.0)),
+        ),
+        conditions=(
+            displacement_bc("fixed", "left", (0.0, 0.0)),
+            traction_bc("pull", "right", (1.0, 0.0)),
+        ),
+        metadata={"neural_representation": "published_crack_coordinate"},
+    )
+    network = FiniteDomainVectorNetwork(
+        problem,
+        displacement_scale=1.0e-6,
+        hidden_layers=(8,),
+    )
+    diagonal = problem.cracks.crack("diagonal")
+    center = 0.5 * (
+        np.asarray(diagonal.start, dtype=float)
+        + np.asarray(diagonal.end, dtype=float)
+    )
+    normal = np.asarray(diagonal.normal, dtype=float)
+    points = torch.tensor(
+        np.vstack((center + 1.0e-8 * normal, center - 1.0e-8 * normal)),
+        dtype=torch.float64,
+    )
+    values = network.published_crack_coordinates(points)
+
+    assert values.shape == (2, 2)
+    assert values[0, 1] == pytest.approx(1.0, rel=1.0e-6)
+    assert values[1, 1] == pytest.approx(-1.0, rel=1.0e-6)
+    assert network.regular_network[0].in_features == 4
 
 
 def test_xvem_public_problem_has_exact_spatial_boundary_and_one_active_tip():

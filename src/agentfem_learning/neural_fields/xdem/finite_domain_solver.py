@@ -164,11 +164,25 @@ def _initial_tip_amplitudes(problem, *, stress_scale: float, dtype):
     return torch.tensor(amplitudes, dtype=dtype)
 
 
-def _vector_mlp(hidden_layers, *, dtype):
-    widths = (2, *(int(item) for item in hidden_layers), 2)
+_ADDITIVE_JUMP_REPRESENTATION = "additive_jump"
+_PUBLISHED_CRACK_COORDINATE_REPRESENTATION = "published_crack_coordinate"
+_BOUNDED_SHEET_COORDINATE_REPRESENTATION = "bounded_sheet_coordinate"
+_SUPPORTED_REPRESENTATIONS = {
+    _ADDITIVE_JUMP_REPRESENTATION,
+    _PUBLISHED_CRACK_COORDINATE_REPRESENTATION,
+    _BOUNDED_SHEET_COORDINATE_REPRESENTATION,
+}
+_CRACK_COORDINATE_REPRESENTATIONS = {
+    _PUBLISHED_CRACK_COORDINATE_REPRESENTATION,
+    _BOUNDED_SHEET_COORDINATE_REPRESENTATION,
+}
+
+
+def _vector_mlp(hidden_layers, *, input_width: int = 2, dtype):
+    widths = (int(input_width), *(int(item) for item in hidden_layers), 2)
     layers: list[torch.nn.Module] = []
-    for input_width, output_width in pairwise(widths):
-        layer = torch.nn.Linear(input_width, output_width, dtype=dtype)
+    for layer_input_width, output_width in pairwise(widths):
+        layer = torch.nn.Linear(layer_input_width, output_width, dtype=dtype)
         torch.nn.init.xavier_uniform_(layer.weight, gain=0.3)
         torch.nn.init.zeros_(layer.bias)
         layers.append(layer)
@@ -178,12 +192,13 @@ def _vector_mlp(hidden_layers, *, dtype):
 
 
 class FiniteDomainVectorNetwork(torch.nn.Module):
-    """Vector MLP extended by one jump feature per crack and tip bases.
+    """Vector XDEM field with crack coordinates and explicit tip bases.
 
-    The crack feature is confined to the declared segment, so adding a crack
-    cannot create a hidden displacement jump along its infinite extension.
-    Four leading branch functions per tip expose the square-root asymptotics
-    without fixing their amplitudes in advance.
+    The default regression representation keeps continuous and jump channels
+    additive.  A benchmark can instead request the published XDEM coordinate
+    form, in which one bounded crack coordinate per segment is appended to the
+    neural-network input.  Both forms confine their discontinuity to the
+    declared segment, and both retain explicit Williams tip functions.
     """
 
     def __init__(
@@ -199,6 +214,17 @@ class FiniteDomainVectorNetwork(torch.nn.Module):
         self.problem = problem
         self.displacement_scale = float(displacement_scale)
         self.crack_decay = float(crack_decay)
+        self.representation_family = str(
+            problem.metadata.get(
+                "neural_representation", _ADDITIVE_JUMP_REPRESENTATION
+            )
+        )
+        if self.representation_family not in _SUPPORTED_REPRESENTATIONS:
+            raise ValueError(
+                "Unsupported finite-domain XDEM representation "
+                f"{self.representation_family!r}; expected one of "
+                f"{tuple(sorted(_SUPPORTED_REPRESENTATIONS))!r}."
+            )
         if self.displacement_scale <= 0.0:
             raise ValueError("displacement_scale must be positive.")
         if self.crack_decay <= 0.0:
@@ -307,14 +333,21 @@ class FiniteDomainVectorNetwork(torch.nn.Module):
                 dtype=dtype,
             )
         )
-        # Keep the continuous mean field, each displacement jump, and the
-        # explicit Williams coefficients in separate approximation channels.
-        # This mirrors the additive XDEM decomposition and avoids asking one
-        # nonlinear MLP to disentangle average and two-sided crack kinematics.
-        self.regular_network = _vector_mlp(hidden_layers, dtype=dtype)
+        input_width = (
+            2 + len(problem.cracks.cracks)
+            if self.representation_family in _CRACK_COORDINATE_REPRESENTATIONS
+            else 2
+        )
+        self.regular_network = _vector_mlp(
+            hidden_layers, input_width=input_width, dtype=dtype
+        )
         self.jump_networks = torch.nn.ModuleList(
             _vector_mlp(hidden_layers, dtype=dtype)
-            for _ in problem.cracks.cracks
+            for _ in (
+                problem.cracks.cracks
+                if self.representation_family == _ADDITIVE_JUMP_REPRESENTATION
+                else ()
+            )
         )
         gauge = _complete_point_gauge(problem, dtype=dtype)
         if gauge is None:
@@ -352,7 +385,9 @@ class FiniteDomainVectorNetwork(torch.nn.Module):
     def has_hard_spatial_boundary(self) -> bool:
         return self.spatial_boundary is not None
 
-    def crack_features(self, coordinates: torch.Tensor) -> torch.Tensor:
+    def additive_jump_features(self, coordinates: torch.Tensor) -> torch.Tensor:
+        """Return the legacy LEFM-windowed additive jump channels."""
+
         relative = coordinates[:, None, :] - self.crack_centers[None, :, :]
         along = torch.einsum("nci,ci->nc", relative, self.crack_tangents)
         normal = torch.einsum("nci,ci->nc", relative, self.crack_normals)
@@ -380,6 +415,65 @@ class FiniteDomainVectorNetwork(torch.nn.Module):
             -self.crack_decay * (normal / self.crack_lengths[None, :]).square()
         )
         return sign * window * decay
+
+    def published_crack_coordinates(self, coordinates: torch.Tensor) -> torch.Tensor:
+        """Return bounded XDEM crack coordinates for every straight segment.
+
+        This is an independent implementation of the coordinate described by
+        Wang et al. (2026): a one-sided sign, a squared endpoint window, and a
+        distance decay.  Distances are normalized by crack length so a change
+        of engineering units does not change the representation.  Squaring
+        the endpoint window makes both the coordinate and its tangential
+        derivative vanish at the two tips and prevents a spurious jump on the
+        infinite extension of the crack line.
+        """
+
+        relative = coordinates[:, None, :] - self.crack_centers[None, :, :]
+        along = torch.einsum("nci,ci->nc", relative, self.crack_tangents)
+        normal = torch.einsum("nci,ci->nc", relative, self.crack_normals)
+        half_length = 0.5 * self.crack_lengths[None, :]
+        endpoint_window = torch.relu(
+            1.0 - (along / half_length).square()
+        ).square()
+        side = torch.where(normal >= 0.0, 1.0, -1.0)
+        decay = torch.exp(
+            -self.crack_decay
+            * torch.abs(normal)
+            / self.crack_lengths[None, :]
+        )
+        return side * endpoint_window * decay
+
+    def bounded_sheet_coordinates(self, coordinates: torch.Tensor) -> torch.Tensor:
+        """Return two-sheet coordinates without an artificial normal layer.
+
+        This keeps the sign and squared endpoint window but removes normal
+        localization.  The coordinate therefore has zero normal derivative on
+        either smooth sheet and does not reconnect the two displacement
+        branches through a prescribed, strain-carrying transition layer.  It
+        is an AgentFEM-Learning formulation candidate, not the published
+        equation.
+        """
+
+        relative = coordinates[:, None, :] - self.crack_centers[None, :, :]
+        along = torch.einsum("nci,ci->nc", relative, self.crack_tangents)
+        normal = torch.einsum("nci,ci->nc", relative, self.crack_normals)
+        half_length = 0.5 * self.crack_lengths[None, :]
+        endpoint_window = torch.relu(
+            1.0 - (along / half_length).square()
+        ).square()
+        side = torch.where(normal >= 0.0, 1.0, -1.0)
+        return side * endpoint_window
+
+    def crack_features(self, coordinates: torch.Tensor) -> torch.Tensor:
+        """Return the crack coordinates used by the selected representation."""
+
+        if self.representation_family == _PUBLISHED_CRACK_COORDINATE_REPRESENTATION:
+            return self.published_crack_coordinates(coordinates)
+        if (
+            self.representation_family == _BOUNDED_SHEET_COORDINATE_REPRESENTATION
+        ):
+            return self.bounded_sheet_coordinates(coordinates)
+        return self.additive_jump_features(coordinates)
 
     def tip_features(self, coordinates: torch.Tensor) -> torch.Tensor:
         relative = coordinates[:, None, :] - self.tip_points[None, :, :]
@@ -451,15 +545,42 @@ class FiniteDomainVectorNetwork(torch.nn.Module):
         return enriched
 
     def _raw_displacement(self, coordinates: torch.Tensor) -> torch.Tensor:
+        components = self.raw_displacement_components(coordinates)
+        return sum(components.values())
+
+    def raw_displacement_components(
+        self, coordinates: torch.Tensor
+    ) -> dict[str, torch.Tensor]:
+        """Return strain-carrying approximation channels before rigid gauges.
+
+        The exact point-gauge correction is a rigid motion and therefore does
+        not change stress.  Keeping these channels queryable makes a failed
+        crack-face check diagnosable instead of merely reporting one aggregate
+        number.
+        """
+
         normalized = (coordinates - self.domain_center) / self.domain_half_span
-        regular = self.regular_network(normalized)
         crack_features = self.crack_features(coordinates)
-        jump = torch.zeros_like(regular)
-        for index, network in enumerate(self.jump_networks):
-            jump = jump + crack_features[:, index : index + 1] * network(normalized)
-        return self.displacement_scale * (regular + jump) + self.tip_enrichment(
-            coordinates
-        )
+        if self.representation_family in _CRACK_COORDINATE_REPRESENTATIONS:
+            neural = self.regular_network(
+                torch.cat((normalized, crack_features), dim=1)
+            )
+            return {
+                "crack_coordinate_network": self.displacement_scale * neural,
+                "williams_tip": self.tip_enrichment(coordinates),
+            }
+        else:
+            regular = self.regular_network(normalized)
+            jump = torch.zeros_like(regular)
+            for index, network in enumerate(self.jump_networks):
+                jump = jump + crack_features[:, index : index + 1] * network(
+                    normalized
+                )
+            return {
+                "regular_network": self.displacement_scale * regular,
+                "jump_network": self.displacement_scale * jump,
+                "williams_tip": self.tip_enrichment(coordinates),
+            }
 
     def _rigid_basis(self, coordinates: torch.Tensor) -> torch.Tensor:
         relative = coordinates - self.domain_center
@@ -826,6 +947,9 @@ def train_finite_domain(
     energy_gap = abs(
         float(validation_values[1].detach().cpu()) - float(refined_values[1].detach().cpu())
     ) / max(abs(float(refined_values[1].detach().cpu())), energy_scale * 1.0e-12)
+    component_face_errors = _crack_face_component_errors(
+        model, crack_face_data, parameters
+    )
     metrics = {
         "training_internal_energy": float(training_values[1].detach().cpu()),
         "validation_internal_energy": float(validation_values[1].detach().cpu()),
@@ -858,6 +982,14 @@ def train_finite_domain(
             )
             / len(training_topology.cell_kinds)
         ),
+        "training_crack_adaptive_point_fraction": float(
+            sum(
+                kind
+                in {"cut", "tip", "one_sided", "near_crack", "aligned"}
+                for kind in training_topology.cell_kinds
+            )
+            / len(training_topology.cell_kinds)
+        ),
         "maximum_sif_extractor_disagreement": float(
             max(
                 np.linalg.norm(
@@ -876,6 +1008,14 @@ def train_finite_domain(
             )
         ),
     }
+    metrics.update(
+        {
+            f"relative_crack_face_traction_{name}": float(
+                torch.sqrt(value).detach().cpu() / parameters["stress_scale"]
+            )
+            for name, value in component_face_errors.items()
+        }
+    )
     return FiniteDomainTrainingOutcome(
         model=model,
         epochs=np.asarray(epochs, dtype=float),
@@ -1226,6 +1366,29 @@ def _crack_face_traction_error(model, crack_face_data, parameters, *, create_gra
         traction = torch.einsum("nij,j->ni", stress, outward_normal)
         errors.append(traction.square().sum(dim=1).mean())
     return torch.stack(errors).mean()
+
+
+def _crack_face_component_errors(model, crack_face_data, parameters):
+    """Resolve crack-face traction error by approximation channel."""
+
+    if model.has_hard_spatial_boundary:
+        return {}
+    selected: dict[str, list[torch.Tensor]] = {}
+    for coordinates, outward_normal in crack_face_data:
+        for name, displacement in model.raw_displacement_components(
+            coordinates
+        ).items():
+            _, stress, _ = _elastic_state(
+                displacement, coordinates, parameters, create_graph=False
+            )
+            traction = torch.einsum("nij,j->ni", stress, outward_normal)
+            selected.setdefault(name, []).append(
+                traction.square().sum(dim=1).mean()
+            )
+    return {
+        name: torch.stack(values).mean()
+        for name, values in selected.items()
+    }
 
 
 def _equilibrium_error(model, coordinates, parameters, *, create_graph):

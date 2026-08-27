@@ -72,13 +72,19 @@ class CutDomainQuadrature2D:
         kinds = {kind: self.cell_kinds.count(kind) for kind in set(self.cell_kinds)}
         return {
             "kind": "straight_crack_cut_domain_quadrature_2d",
-            "schema_version": "0.1.0",
+            "schema_version": "0.2.0",
             "point_count": len(self.coordinates),
             "grid_shape": self.grid_shape,
             "crack_ids": self.crack_ids,
             "domain_area": self.domain_area,
             "weight_sum": float(self.weights.sum()),
             "point_kinds": kinds,
+            "local_rules": {
+                "regular": "midpoint",
+                "near_or_aligned_crack": "tensor_gauss_2x2",
+                "cut_polygon": "positive_triangle_degree_2",
+                "tip_cell": "tensor_gauss_4x4",
+            },
             "fingerprint": self.fingerprint,
         }
 
@@ -89,12 +95,14 @@ def straight_crack_cut_quadrature(
     *,
     variant: int = 0,
 ) -> CutDomainQuadrature2D:
-    """Build a deterministic midpoint/cut-cell rule for straight cracks.
+    """Build a deterministic, crack-adaptive cut-cell rule.
 
     Cells crossed away from a tip are clipped into the two crack half-planes.
-    A cell containing a crack tip receives a symmetric 2x2 rule because the
-    physical domain remains connected around that endpoint.  This distinction
-    prevents a finite crack from being silently extended across its tip cell.
+    Each clipped polygon is integrated by a second-order triangle rule.  Tip
+    cells receive a symmetric 4x4 tensor rule, and an adjacent band receives a
+    2x2 rule.  All other cells retain one midpoint.  The added local resolution
+    does not add fictitious energy: every parent-cell weight still sums to its
+    exact physical area.
     """
 
     target = int(count)
@@ -132,27 +140,39 @@ def straight_crack_cut_quadrature(
                     "more than one crack; increase integration density."
                 )
             if not intersecting:
+                near_crack = any(
+                    _cell_near_segment(crack, bounds, 2.0 * np.hypot(dx, dy))
+                    for crack in cracks
+                )
+                if near_crack:
+                    _append_tensor_cell_rule(
+                        points,
+                        weights,
+                        cell_ids,
+                        cell_kinds,
+                        bounds,
+                        cell_id,
+                        order=2,
+                        kind="near_crack",
+                    )
+                    continue
                 points.append(np.asarray(((cxmin + cxmax) / 2, (cymin + cymax) / 2)))
                 weights.append(dx * dy)
                 cell_ids.append(cell_id)
                 cell_kinds.append("regular")
                 continue
             crack = intersecting[0]
-            if _cell_contains_tip(crack, bounds, tolerance):
-                offset = 0.5 / sqrt(3.0)
-                for xi in (-offset, offset):
-                    for eta in (-offset, offset):
-                        points.append(
-                            np.asarray(
-                                (
-                                    (cxmin + cxmax) / 2 + xi * dx,
-                                    (cymin + cymax) / 2 + eta * dy,
-                                )
-                            )
-                        )
-                        weights.append(dx * dy / 4.0)
-                        cell_ids.append(cell_id)
-                        cell_kinds.append("tip")
+            if _cell_touches_tip(crack, bounds, tolerance):
+                _append_tensor_cell_rule(
+                    points,
+                    weights,
+                    cell_ids,
+                    cell_kinds,
+                    bounds,
+                    cell_id,
+                    order=4,
+                    kind="tip",
+                )
                 continue
             polygon = np.asarray(
                 ((cxmin, cymin), (cxmax, cymin), (cxmax, cymax), (cxmin, cymax)),
@@ -166,18 +186,27 @@ def straight_crack_cut_quadrature(
             )
             nonempty = [(piece, _polygon_area_centroid(piece)) for piece in pieces if len(piece) >= 3]
             if len(nonempty) != 2 or any(item[1][0] <= tolerance**2 for item in nonempty):
-                # The segment lies on a cell edge.  Adjacent cell midpoints
-                # already sample the two physical sides without a cut-cell rule.
-                points.append(np.asarray(((cxmin + cxmax) / 2, (cymin + cymax) / 2)))
-                weights.append(dx * dy)
-                cell_ids.append(cell_id)
-                cell_kinds.append("aligned")
+                # The segment lies on a cell edge.  The cell belongs entirely
+                # to one physical side, but a midpoint does not resolve the
+                # steep near-face energy.  Retain the whole-cell area and use
+                # a 2x2 rule instead of inventing an internal cut.
+                _append_tensor_cell_rule(
+                    points,
+                    weights,
+                    cell_ids,
+                    cell_kinds,
+                    bounds,
+                    cell_id,
+                    order=2,
+                    kind="aligned",
+                )
                 continue
-            for _, (area, centroid) in nonempty:
-                points.append(centroid)
-                weights.append(area)
-                cell_ids.append(cell_id)
-                cell_kinds.append("cut")
+            for polygon_piece, _ in nonempty:
+                for point, weight in _polygon_second_order_rule(polygon_piece):
+                    points.append(point)
+                    weights.append(weight)
+                    cell_ids.append(cell_id)
+                    cell_kinds.append("cut")
 
     expanded = _make_points_one_sided(
         points,
@@ -197,6 +226,75 @@ def straight_crack_cut_quadrature(
         domain_area=problem.domain.area,
         grid_shape=(nx, ny),
     )
+
+
+def _append_tensor_cell_rule(
+    points,
+    weights,
+    cell_ids,
+    cell_kinds,
+    bounds,
+    cell_id,
+    *,
+    order,
+    kind,
+):
+    """Append an area-exact tensor Gauss rule on one rectangle."""
+
+    xmin, xmax, ymin, ymax = bounds
+    nodes, gauss_weights = np.polynomial.legendre.leggauss(int(order))
+    center_x = 0.5 * (xmin + xmax)
+    center_y = 0.5 * (ymin + ymax)
+    half_x = 0.5 * (xmax - xmin)
+    half_y = 0.5 * (ymax - ymin)
+    jacobian = half_x * half_y
+    for xi, weight_x in zip(nodes, gauss_weights, strict=True):
+        for eta, weight_y in zip(nodes, gauss_weights, strict=True):
+            points.append(
+                np.asarray((center_x + half_x * xi, center_y + half_y * eta))
+            )
+            weights.append(float(jacobian * weight_x * weight_y))
+            cell_ids.append(cell_id)
+            cell_kinds.append(kind)
+
+
+def _cell_near_segment(crack, bounds, distance: float) -> bool:
+    """Whether a cell center lies in the declared crack-integration band."""
+
+    xmin, xmax, ymin, ymax = bounds
+    point = np.asarray((0.5 * (xmin + xmax), 0.5 * (ymin + ymax)))
+    start = np.asarray(crack.start, dtype=float)
+    delta = np.asarray(crack.end, dtype=float) - start
+    fraction = float((point - start) @ delta / (delta @ delta))
+    closest = start + np.clip(fraction, 0.0, 1.0) * delta
+    return float(np.linalg.norm(point - closest)) <= float(distance)
+
+
+def _polygon_second_order_rule(polygon):
+    """Triangulate one convex polygon and return a positive degree-2 rule."""
+
+    polygon = np.asarray(polygon, dtype=float)
+    center = polygon.mean(axis=0)
+    selected = []
+    barycentric = (
+        (2.0 / 3.0, 1.0 / 6.0, 1.0 / 6.0),
+        (1.0 / 6.0, 2.0 / 3.0, 1.0 / 6.0),
+        (1.0 / 6.0, 1.0 / 6.0, 2.0 / 3.0),
+    )
+    for first, second in zip(polygon, np.roll(polygon, -1, axis=0), strict=True):
+        first_relative = first - center
+        second_relative = second - center
+        cross = (
+            first_relative[0] * second_relative[1]
+            - first_relative[1] * second_relative[0]
+        )
+        area = 0.5 * abs(float(cross))
+        if area == 0.0:
+            continue
+        for weights in barycentric:
+            point = weights[0] * center + weights[1] * first + weights[2] * second
+            selected.append((point, area / 3.0))
+    return tuple(selected)
 
 
 def _segment_intersects_cell(crack, bounds, tolerance: float) -> bool:
@@ -227,11 +325,11 @@ def _segment_intersects_cell(crack, bounds, tolerance: float) -> bool:
     )
 
 
-def _cell_contains_tip(crack, bounds, tolerance: float) -> bool:
+def _cell_touches_tip(crack, bounds, tolerance: float) -> bool:
     xmin, xmax, ymin, ymax = bounds
     return any(
-        xmin + tolerance < point[0] < xmax - tolerance
-        and ymin + tolerance < point[1] < ymax - tolerance
+        xmin - tolerance <= point[0] <= xmax + tolerance
+        and ymin - tolerance <= point[1] <= ymax + tolerance
         for point in (crack.start, crack.end)
     )
 

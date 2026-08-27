@@ -34,7 +34,7 @@ core `model.step(target=spec, executor=...)` boundary.
   active tip, exact spatial Dirichlet enforcement, independently extracted
   `K_I/K_II`, and physics-quality checks. It is patch-test evidence, not a
   predictive finite-domain validation; the traction-driven Griffith limit
-  remains the next solver gate. A topology-aware cut-cell rule now gives every
+  remains the next solver gate. A topology-aware, locally adaptive cut-cell rule now gives every
   training, validation, and refinement point an explicit crack-side identity,
   preserves area, and records independent grid fingerprints.
 - **Milestone B -- static multi-crack fields (experimental solver
@@ -108,12 +108,14 @@ path-independence, crack-face traction, and bulk-equilibrium acceptance. The
 spatial hard-Dirichlet and active-tip milestone is now implemented. The
 published X-VEM problem is intentionally classified as an extended patch test
 because its analytic field supplies the essential boundary data and admissible
-interior lifting. LEFM-compatible internal-crack closure and cut-domain
-quadrature lowered the Griffith path variation to about 15%, but did not pass
-the SIF, extractor-agreement, or crack-face-traction gates. The next milestone
-is therefore an explicit crack-surface variational treatment, then domain-size
-convergence toward Griffith without an analytic interior field, followed by
-the four-tip collinear-crack reference.
+interior lifting. LEFM-compatible internal-crack closure plus aligned face/tip
+integration raised the Griffith diagnostic to normalized `K_I` about 0.69 and
+lowered path variation to about 8.6%, but did not pass extractor agreement,
+crack-face traction, or bulk-equilibrium gates. Published and regularized
+crack-coordinate input forms were also executed and rejected as defaults. The
+next milestone is therefore a traction-free discontinuous-trial-space
+correction, then domain-size convergence toward Griffith without an analytic
+interior field, followed by the four-tip collinear-crack reference.
 
 Registering a reference is not a solver pass. The single-crack reference uses
 Benvenuti et al.'s public mixed-mode X-VEM problem and preserves its boundary
@@ -130,3 +132,5 @@ Official references:
 - [PyTorch serialization semantics](https://docs.pytorch.org/docs/stable/notes/serialization.html)
 - [Benvenuti et al., mixed-mode X-VEM benchmarks](https://arxiv.org/abs/2111.04150)
 - [Liew et al., tabulated two-collinear-crack reference](https://doi.org/10.1002/nme.1786)
+- [Wang et al., XDEM graph-field architecture](https://www.nature.com/articles/s41467-026-76748-1)
+- [Official XDEM reference implementation](https://github.com/yizheng-wang/XDEM)

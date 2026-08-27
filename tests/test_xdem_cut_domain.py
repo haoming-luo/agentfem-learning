@@ -41,6 +41,10 @@ def test_cut_domain_quadrature_conserves_area_and_tracks_inclined_crack_sides():
     assert set(np.unique(rule.side_codes[:, 0])) == {-1, 1}
     assert any(kind == "cut" for kind in rule.cell_kinds)
     assert any(kind == "tip" for kind in rule.cell_kinds)
+    assert any(kind == "near_crack" for kind in rule.cell_kinds)
+    assert len(rule.coordinates) > 256
+    assert rule.summary()["schema_version"] == "0.2.0"
+    assert rule.summary()["local_rules"]["tip_cell"] == "tensor_gauss_4x4"
     assert len(rule.fingerprint) == 64
 
 
@@ -68,6 +72,19 @@ def test_cut_domain_variants_are_deterministic_but_independent():
     assert training.fingerprint == repeated.fingerprint
     assert training.fingerprint != validation.fingerprint
     assert training.grid_shape != validation.grid_shape
+
+
+def test_grid_aligned_crack_refines_faces_and_vertex_tips_without_area_loss():
+    problem = _problem(
+        fracture.segment("aligned", start=(-0.5, 0.0), end=(0.5, 0.0))
+    )
+
+    rule = straight_crack_cut_quadrature(problem, 256)
+
+    assert rule.cell_kinds.count("aligned") >= 4
+    assert rule.cell_kinds.count("tip") >= 16
+    assert rule.weights.sum() == pytest.approx(problem.domain.area, rel=1.0e-12)
+    assert set(np.unique(rule.side_codes[:, 0])) == {-1, 1}
 
 
 def test_cut_domain_quadrature_fails_closed_when_one_cell_contains_two_cracks():

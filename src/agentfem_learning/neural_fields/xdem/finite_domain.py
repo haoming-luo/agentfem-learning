@@ -652,6 +652,15 @@ def finite_domain_spec(
         ),
         metadata={"purpose": "finite_domain_energy_consistency"},
     )
+    representation_family = str(
+        problem.metadata.get("neural_representation", "additive_jump")
+    )
+    representation_features = (
+        ("coordinates", "published_crack_coordinates")
+        if representation_family
+        in {"published_crack_coordinate", "bounded_sheet_coordinate"}
+        else ("coordinates", "crack_jump_functions")
+    )
     return learning.NeuralFieldSpec(
         fields=(displacement,),
         objectives=(
@@ -686,8 +695,8 @@ def finite_domain_spec(
             learning.NeuralRepresentation(
                 name="multi_crack_xdem_d_displacement",
                 fields=(displacement.name,),
-                architecture="xdem:finite_domain_vector_field",
-                features=("coordinates", "crack_jump_functions"),
+                architecture=f"xdem:{representation_family}_vector_field",
+                features=representation_features,
                 enrichments=tuple(
                     f"xdem:williams_tip:{tip_id}" for tip_id in problem.active_tip_ids
                 ),
@@ -730,6 +739,7 @@ def finite_domain_spec(
             "maturity": "experimental_solver",
             "executable": True,
             "external_benchmark_verified": False,
+            "representation_family": representation_family,
         },
     )
 

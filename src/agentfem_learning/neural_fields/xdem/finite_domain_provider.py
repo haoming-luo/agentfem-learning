@@ -93,6 +93,13 @@ class XDEMFiniteDomainStep:
                 "provider": "agentfem-learning.xdem",
                 "provider_version": "0.1.0a1",
                 "method": "finite_domain_xdem_d",
+                "neural_representation": {
+                    "family": outcome.model.representation_family,
+                    "crack_coordinate_reference": problem.metadata.get(
+                        "representation_reference"
+                    ),
+                    "published_target_used_for_training": False,
+                },
                 "specification": self.spec.summary(),
                 "training": {
                     **asdict(self.options),

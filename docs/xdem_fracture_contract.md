@@ -50,9 +50,11 @@ Every energy solve distinguishes:
 4. boundary, jump, traction, and applicable physics-balance checks.
 
 The executable provider uses deterministic, topology-aware cut-cell rules.
-Ordinary cells use midpoint integration, cells crossed by a straight crack are
-clipped into two one-sided polygons, and cells containing a crack tip receive
-a symmetric local rule without silently extending the crack through the cell.
+Ordinary cells use midpoint integration. Cells crossed by a straight crack are
+clipped into two one-sided polygons and integrated by a positive second-order
+triangle rule. A narrow neighboring band and grid-aligned crack cells use a
+2-by-2 tensor rule; cells touching a crack tip use a 4-by-4 rule without
+silently extending the crack through the cell.
 Every point carries one side code per crack, and quadrature weights sum to the
 physical domain area. Training, held-out validation, and refinement use
 different deterministic grid variants and retain distinct fingerprints. If a
@@ -62,7 +64,7 @@ stratified Monte Carlo rule remains an implementation experiment: fixed random
 clouds were observed to admit low training energy with a materially different
 held-out energy.
 
-The approximation is explicitly additive: a continuous mean field, one
+The current default approximation is explicitly additive: a continuous mean field, one
 two-sided jump network per crack, and one trainable Williams field per active
 tip. A fully internal straight crack uses an LEFM-compatible elliptical jump
 closure at its two active tips; a boundary crack retains a separate mouth/tip
@@ -71,6 +73,14 @@ point gauges are imposed by an exact zero-strain rigid-motion projection rather
 than a local penalty. Load-derived nominal SIFs may initialize the Williams
 coefficients as a numerical preconditioner, but published target values never
 enter training and acceptance still uses independently extracted SIFs.
+
+The published `NN(x, rho)` crack-coordinate architecture and an
+AgentFEM-Learning bounded-sheet variant are retained as internal, tested
+representation candidates. Neither is the default. In the Griffith diagnostic,
+the published distance-decay coordinate produced a large crack-face stress
+layer, while smoothing or removing that decay did not improve the independent
+SIF checks. These negative results prevent a literature-derived mechanism from
+being promoted merely because it trains.
 
 Spatial essential data are serialized as a named field family rather than a
 live callback. For a complete rectangular boundary, the trial field is
@@ -98,15 +108,19 @@ single extractor from certifying an inconsistent field.
 
 The published-reference gate additionally requires crack-face traction and
 bulk-equilibrium residuals below their declared limits. The latest
-traction-driven Griffith diagnostic uses LEFM-compatible jump closure and the
-cut-domain rule. It reduced the maximum interaction-integral path variation to
-about 15%, but normalized `K_I` remained about 0.65, the independent SIF
-extractors still differed by about 53%, and crack-face traction remained
-unacceptable. It is therefore a sharper formulation diagnosis, not a
-promotion result. The public hard-boundary Mode-I/II extended patch passes
-with one active tip and is classified as patch evidence. An explicit
-crack-surface variational treatment remains the next predictive gate, followed
-by Griffith domain-size convergence and the interacting four-tip case.
+traction-driven Griffith diagnostic additionally resolves grid-aligned crack
+faces and tips. Under the fixed training budget it raised normalized `K_I` to
+about 0.69, reduced maximum path variation to about 8.6%, and reduced extractor
+disagreement to about 38%. Crack-face traction and bulk equilibrium still
+failed their declared limits, so this remains a sharper formulation diagnosis,
+not a promotion result. Channel-resolved evidence identifies the continuous
+mean field, rather than the Williams term, as the dominant source of remaining
+face traction. The public hard-boundary Mode-I/II extended patch passes with
+one active tip and is classified as patch evidence. A traction-free
+discontinuous-trial-space correction remains the next predictive gate. A
+crack-face penalty was tested and rejected as a default because it reduced the
+residual by suppressing the physical crack response. Griffith domain-size
+convergence and the interacting four-tip case follow only after this gate.
 
 ## Discontinuous output
 
