@@ -33,8 +33,9 @@ class SpatialVectorField2D:
 
     A field is data, not a Python callback.  Providers may implement declared
     families without serializing executable code; unsupported families fail
-    before training.  The first family is the mixed-mode Williams displacement
-    used by public fracture patch tests.
+    before training.  The bundled families cover the mixed-mode Williams field
+    and the exact Westergaard center-crack displacement used by public fracture
+    verification problems.
     """
 
     name: str
@@ -47,36 +48,44 @@ class SpatialVectorField2D:
         family = str(self.family).strip().lower()
         if not name:
             raise ValueError("SpatialVectorField2D.name must not be empty.")
-        if family != "williams_displacement":
+        if family not in {
+            "williams_displacement",
+            "westergaard_center_crack_displacement",
+        }:
             raise UnsupportedFiniteDomainError(
                 f"{UnsupportedFiniteDomainError.code}: unsupported spatial "
                 f"vector-field family {family!r}."
             )
         parameters = dict(self.parameters)
-        required = {"tip", "crack_angle", "k_i", "k_ii"}
+        required = (
+            {"tip", "crack_angle", "k_i", "k_ii"}
+            if family == "williams_displacement"
+            else {"center", "half_crack_length", "remote_stress"}
+        )
         if set(parameters) != required:
             raise ValueError(
-                "Williams displacement requires tip, crack_angle, k_i, and k_ii."
+                f"{family} requires exactly {tuple(sorted(required))!r}."
             )
-        tip = tuple(float(item) for item in parameters["tip"])
-        values = (
-            float(parameters["crack_angle"]),
-            float(parameters["k_i"]),
-            float(parameters["k_ii"]),
-        )
-        if len(tip) != 2 or any(not isfinite(item) for item in (*tip, *values)):
-            raise ValueError("Williams displacement parameters must be finite.")
+        point_key = "tip" if family == "williams_displacement" else "center"
+        point = tuple(float(item) for item in parameters[point_key])
+        scalar_keys = tuple(sorted(required - {point_key}))
+        values = {key: float(parameters[key]) for key in scalar_keys}
+        if len(point) != 2 or any(
+            not isfinite(item) for item in (*point, *values.values())
+        ):
+            raise ValueError("Spatial displacement parameters must be finite.")
+        if family == "westergaard_center_crack_displacement" and (
+            values["half_crack_length"] <= 0.0 or values["remote_stress"] <= 0.0
+        ):
+            raise ValueError(
+                "Westergaard half_crack_length and remote_stress must be positive."
+            )
         object.__setattr__(self, "name", name)
         object.__setattr__(self, "family", family)
         object.__setattr__(
             self,
             "parameters",
-            {
-                "tip": tip,
-                "crack_angle": values[0],
-                "k_i": values[1],
-                "k_ii": values[2],
-            },
+            {point_key: point, **values},
         )
         object.__setattr__(self, "metadata", dict(self.metadata))
 
@@ -502,6 +511,28 @@ def williams_displacement_field(
     )
 
 
+def westergaard_center_crack_displacement_field(
+    name: str,
+    *,
+    center=(0.0, 0.0),
+    half_crack_length: float,
+    remote_stress: float,
+    metadata: Mapping[str, object] | None = None,
+) -> SpatialVectorField2D:
+    """Declare the exact infinite-plate Mode-I center-crack displacement."""
+
+    return SpatialVectorField2D(
+        name=name,
+        family="westergaard_center_crack_displacement",
+        parameters={
+            "center": tuple(center),
+            "half_crack_length": half_crack_length,
+            "remote_stress": remote_stress,
+        },
+        metadata=metadata or {},
+    )
+
+
 def spatial_displacement_bc(
     name: str,
     boundaries,
@@ -848,5 +879,6 @@ __all__ = [
     "spatial_displacement_bc",
     "static_crack_problem",
     "traction_bc",
+    "westergaard_center_crack_displacement_field",
     "williams_displacement_field",
 ]

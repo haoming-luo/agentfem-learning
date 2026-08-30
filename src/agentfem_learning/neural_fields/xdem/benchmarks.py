@@ -14,6 +14,7 @@ from .finite_domain import (
     spatial_displacement_bc,
     static_crack_problem,
     traction_bc,
+    westergaard_center_crack_displacement_field,
     williams_displacement_field,
 )
 
@@ -280,6 +281,69 @@ def center_crack_domain_problem(
     )
 
 
+def center_crack_exact_solution_problem(
+    material,
+    *,
+    half_crack_length: float = 1.0,
+    half_width: float = 12.0,
+    half_height: float = 12.0,
+    remote_stress: float = 1.0,
+):
+    """Two-tip extended patch test using the exact Westergaard solution.
+
+    Unlike :func:`center_crack_domain_problem`, this verifies formula
+    implementation, two-sheet kinematics, and both SIF extractors. The exact
+    field is intentionally supplied throughout the domain and the neural
+    correction must vanish; it is not reported as a predictive solve.
+    """
+
+    a = float(half_crack_length)
+    width = float(half_width)
+    height = float(half_height)
+    stress = float(remote_stress)
+    if min(a, width, height, stress) <= 0.0 or a >= width:
+        raise ValueError(
+            "Require positive geometry/stress and half_crack_length < half_width."
+        )
+    reference = griffith_center_crack_reference()
+    boundary_field = westergaard_center_crack_displacement_field(
+        "exact_westergaard_outer_displacement",
+        half_crack_length=a,
+        remote_stress=stress,
+        metadata={
+            "role": "published_boundary_data",
+            "reference": reference.key,
+            "source": "https://doi.org/10.1007/s10704-019-00351-3",
+            "interior_extension": "declared_field",
+        },
+    )
+    return static_crack_problem(
+        domain=rectangular_domain((-width, width, -height, height), name="plate"),
+        material=material,
+        cracks=fracture.crack_set(
+            fracture.segment("main", start=(-a, 0.0), end=(a, 0.0))
+        ),
+        conditions=(
+            spatial_displacement_bc(
+                "exact_westergaard_outer_displacement",
+                ("left", "right", "bottom", "top"),
+                boundary_field,
+            ),
+        ),
+        name="griffith_center_crack_exact_solution",
+        metadata={
+            "reference": reference.summary(),
+            "reference_scale": stress * sqrt(pi * a),
+            "neural_representation": "riemann_sheet_coordinate",
+            "representation_reference": (
+                "analytic two-sheet square-root coordinate for a finite crack"
+            ),
+            "benchmark_role": "public_center_crack_two_tip_extended_patch_test",
+            "validation_class": "extended_patch_test",
+        },
+    )
+
+
 def two_collinear_cracks_reference(a_over_l: float = 0.5) -> PublishedSIFReference2D:
     """Exact equal collinear-crack values tabulated by Liew et al.
 
@@ -366,6 +430,7 @@ def two_collinear_cracks_domain_problem(
 __all__ = [
     "PublishedSIFReference2D",
     "center_crack_domain_problem",
+    "center_crack_exact_solution_problem",
     "griffith_center_crack_reference",
     "two_collinear_cracks_domain_problem",
     "two_collinear_cracks_reference",

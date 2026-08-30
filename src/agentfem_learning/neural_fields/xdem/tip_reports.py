@@ -157,7 +157,7 @@ class CrackOpeningSIFReport2D:
     @property
     def path_variation(self) -> float:
         values = np.column_stack((self.k_i_by_radius, self.k_ii_by_radius))
-        coordinate = np.sqrt(np.asarray(self.radii, dtype=float))
+        coordinate = np.asarray(self.radii, dtype=float)
         fitted = np.column_stack(
             (
                 np.polyval(np.polyfit(coordinate, values[:, 0], 1), coordinate),
@@ -405,7 +405,11 @@ def _tensor_to_local(values, rotation):
 
 
 def _zero_radius_intercept(radii, values) -> float:
-    coordinate = np.sqrt(np.asarray(radii, dtype=float))
+    # The COD-derived estimate already removes the leading square-root crack-tip
+    # singularity.  Its remaining finite-radius correction is analytic in r
+    # (for a centre crack, K_COD(r) / K = sqrt(1 - r / (2 a))).  Extrapolating
+    # the estimate against sqrt(r) therefore biases the zero-radius intercept.
+    coordinate = np.asarray(radii, dtype=float)
     return float(np.polyfit(coordinate, np.asarray(values, dtype=float), 1)[1])
 
 

@@ -16,6 +16,13 @@ from importlib import metadata
 from pathlib import Path
 
 EXTENSION = "agentfem-learning.xdem"
+EXPECTED_PROVIDERS = frozenset(
+    {
+        "xdem_reference_neural_field",
+        "xdem_vector_lefm_neural_field",
+        "xdem_finite_domain_lefm_neural_field",
+    }
+)
 
 
 def _sha256(path: Path) -> str:
@@ -75,10 +82,7 @@ def evaluate(
     extensions.load_extension(EXTENSION)
     after = {item.name for item in step_providers()}
 
-    expected_providers = {
-        "xdem_reference_neural_field",
-        "xdem_vector_lefm_neural_field",
-    }
+    expected_providers = EXPECTED_PROVIDERS
     installed = {}
     installed_ok = True
     for distribution_name in ("agentfem", "agentfem-learning"):

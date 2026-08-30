@@ -9,6 +9,7 @@ from ... import __version__
 from .benchmarks import (
     PublishedSIFReference2D,
     center_crack_domain_problem,
+    center_crack_exact_solution_problem,
     griffith_center_crack_reference,
     two_collinear_cracks_domain_problem,
     two_collinear_cracks_reference,
@@ -42,6 +43,7 @@ from .finite_domain import (
     spatial_displacement_bc,
     static_crack_problem,
     traction_bc,
+    westergaard_center_crack_displacement_field,
     williams_displacement_field,
 )
 from .finite_domain_provider import (
@@ -98,6 +100,7 @@ __all__ = [
     "XDEMVectorStep",
     "__version__",
     "center_crack_domain_problem",
+    "center_crack_exact_solution_problem",
     "convergence_case",
     "crack_opening_sif_reports",
     "displacement_bc",
@@ -119,6 +122,7 @@ __all__ = [
     "two_collinear_cracks_domain_problem",
     "two_collinear_cracks_reference",
     "vector_tip_spec",
+    "westergaard_center_crack_displacement_field",
     "williams_displacement_field",
     "xvem_mixed_mode_domain_problem",
     "xvem_mixed_mode_reference",

@@ -13,7 +13,7 @@ from agentfem_learning.neural_fields import xdem
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--case", choices=("xvem", "center", "two"), default="xvem"
+        "--case", choices=("xvem", "center_exact", "center", "two"), default="xvem"
     )
     parser.add_argument("--epochs", type=int, default=1000)
     parser.add_argument("--lbfgs-steps", type=int, default=12)
@@ -30,6 +30,10 @@ def main() -> None:
     )
     if args.case == "xvem":
         problem = xdem.xvem_mixed_mode_domain_problem(material)
+    elif args.case == "center_exact":
+        problem = xdem.center_crack_exact_solution_problem(
+            material, remote_stress=1000.0
+        )
     else:
         factory = (
             xdem.center_crack_domain_problem

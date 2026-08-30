@@ -104,10 +104,19 @@ uncertain even if training converged.
 
 Every finite-domain result now carries two independent SIF estimates: the
 domain interaction integral and a zero-radius extrapolation of two-sided crack
-opening displacement. The latter fits the sampled values against `sqrt(r)` and
-reports its own residual. Their disagreement is an explicit verification
-claim; agreement does not prove correctness, but disagreement prevents a
-single extractor from certifying an inconsistent field.
+opening displacement. Once the leading square-root crack-tip singularity has
+been removed by the COD formula, the remaining finite-radius correction is
+analytic in `r`; the extractor therefore extrapolates the estimates linearly
+against `r` and reports its own residual. Their disagreement is an explicit
+verification claim; agreement does not prove correctness, but disagreement
+prevents a single extractor from certifying an inconsistent field.
+
+The exact Westergaard center-crack problem is a second public extended patch
+test. It exercises two active tips and the finite branch cut and passes the
+equilibrium, traction-free face, energy-refinement, path-independence, and
+independent SIF-extractor gates. Because the analytic displacement is declared
+throughout the domain, this evidence validates kinematics and diagnostics; it
+does not replace the remote-traction predictive benchmark.
 
 The published-reference gate additionally requires crack-face traction and
 bulk-equilibrium residuals below their declared limits. The latest

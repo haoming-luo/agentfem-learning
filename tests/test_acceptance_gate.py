@@ -4,7 +4,7 @@ from pathlib import Path
 
 from agentfem import extensions, models, studies
 
-from acceptance_gate import evaluate
+from acceptance_gate import EXPECTED_PROVIDERS, evaluate
 from agentfem_learning.neural_fields.xdem import mode_iii_tip_spec
 
 
@@ -33,7 +33,9 @@ def test_extension_acceptance_consumes_common_result_contract(
     assert report["core_modified"] is False
     assert report["simulation_result"] == "passed"
     assert report["artifact_integrity"] is True
+    assert report["providers"] == tuple(sorted(EXPECTED_PROVIDERS))
     assert report["providers"] == (
+        "xdem_finite_domain_lefm_neural_field",
         "xdem_reference_neural_field",
         "xdem_vector_lefm_neural_field",
     )

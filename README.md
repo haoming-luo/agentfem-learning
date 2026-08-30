@@ -34,9 +34,10 @@ cracks, and an inactive boundary crack mouth with explicit active-tip identity.
 Its area-conserving cut-domain quadrature records the side of every straight
 crack at every integration point and keeps training, validation, and refinement
 rules independently fingerprinted.
-The public mixed-mode X-VEM extended patch test is accepted; it verifies exact
-boundary enforcement, enrichment reproduction, and independent SIF/J
-extraction, not predictive crack interaction. These capabilities do not claim
+The public mixed-mode X-VEM and two-tip Westergaard extended patch tests are
+accepted; they verify exact boundary enforcement, enrichment reproduction,
+two-sheet kinematics, and independent SIF/J extraction, not predictive crack
+interaction. These capabilities do not claim
 curved or intersecting cracks, crack growth, phase-field fracture, or external
 multi-crack validation.
 
@@ -115,13 +116,16 @@ reference case defaults to reproducible CPU `float64`; use
 python examples/mode_iii_tip/case.py --output outputs/mode_iii_tip
 python examples/vector_mixed_mode_tip/case.py
 python examples/finite_domain_benchmarks/case.py --case xvem
+python examples/finite_domain_benchmarks/case.py --case center_exact
 python examples/finite_domain_benchmarks/case.py --case center
 python examples/finite_domain_benchmarks/case.py --case two
 ```
 
-The `xvem` command is a public extended patch test and should be accepted. The
-`center` and `two` commands remain predictive promotion candidates: they may
-finish successfully while `published_benchmark.json` correctly says `failed`.
+The `xvem` and `center_exact` commands are public extended patch tests and
+should be accepted. The latter supplies the exact Westergaard field throughout
+the domain and is therefore not a predictive center-crack solve. The `center`
+and `two` commands remain predictive promotion candidates: they may finish
+successfully while `published_benchmark.json` correctly says `failed`.
 Promotion requires the full convergence ledger in the roadmap.
 
 The four required numerical axes use one bounded-memory entry point:

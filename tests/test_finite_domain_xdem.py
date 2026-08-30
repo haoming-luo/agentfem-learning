@@ -9,9 +9,11 @@ from agentfem import extensions, fracture, models, studies
 from agentfem.step_providers import step_providers
 
 from agentfem_learning.neural_fields.xdem import (
+    CrackOpeningSIFReport2D,
     UnsupportedFiniteDomainError,
     XDEMFiniteDomainStep,
     center_crack_domain_problem,
+    center_crack_exact_solution_problem,
     crack_opening_sif_reports,
     displacement_bc,
     finite_domain_spec,
@@ -209,6 +211,79 @@ def test_point_gauges_remove_rigid_modes_without_clamping_remote_boundaries(tmp_
                 point_displacement("rotation", (2.0, -2.0), (None, 0.0)),
             ),
         )
+
+
+def test_westergaard_boundary_field_is_serializable_and_two_sheeted():
+    problem = center_crack_exact_solution_problem(
+        _material(),
+        half_crack_length=1.0,
+        half_width=4.0,
+        half_height=3.0,
+        remote_stress=2.0e6,
+    )
+    condition = problem.conditions[0]
+    assert condition.field.family == "westergaard_center_crack_displacement"
+    restored = problem_from_spec(
+        finite_domain_spec(problem, domain_samples=128, boundary_samples=16)
+    )
+    assert restored.summary() == problem.summary()
+
+    network = FiniteDomainVectorNetwork(
+        problem,
+        displacement_scale=2.0e6 * 8.0 / 210.0e9,
+        hidden_layers=(8,),
+    )
+    epsilon = 1.0e-7
+    traces = torch.tensor(
+        ((0.0, epsilon), (0.0, -epsilon), (2.0, 0.0), (-2.0, 0.0)),
+        dtype=torch.float64,
+    )
+    exact = network._spatial_field(traces)
+    assert exact[0, 0] == pytest.approx(0.0, abs=1.0e-18)
+    assert exact[0, 1] == pytest.approx(-exact[1, 1], rel=1.0e-8)
+    assert exact[0, 1] > 0.0
+    assert exact[2, 0] == pytest.approx(-exact[3, 0], rel=1.0e-12)
+    assert exact[2, 1] == pytest.approx(0.0, abs=1.0e-18)
+
+    boundary = torch.tensor(
+        ((-4.0, 1.0), (4.0, -1.0), (1.0, 3.0), (-1.0, -3.0)),
+        dtype=torch.float64,
+    )
+    assert torch.allclose(
+        network(boundary),
+        network._spatial_field(boundary),
+        rtol=1.0e-12,
+        atol=1.0e-14,
+    )
+
+
+def test_westergaard_extended_patch_test_accepts_both_tip_extractors(tmp_path):
+    problem = center_crack_exact_solution_problem(
+        _material(),
+        half_crack_length=1.0,
+        half_width=12.0,
+        half_height=12.0,
+        remote_stress=2.0e6,
+    )
+    result = XDEMFiniteDomainStep(
+        finite_domain_spec(problem, domain_samples=512, boundary_samples=32),
+        options=ReferenceTrainingOptions(
+            adam_epochs=2,
+            lbfgs_steps=0,
+            hidden_layers=(8,),
+            seed=2026,
+        ),
+        output=tmp_path,
+    ).solve_result()
+
+    benchmark = result.metadata["published_benchmark"]
+    assert benchmark["status"] == "accepted"
+    assert len(benchmark["tips"]) == 2
+    assert all(max(item["relative_errors"]) < 1.0e-3 for item in benchmark["tips"])
+    assert all(
+        item["accepted"] for item in benchmark["solver_quality_checks"].values()
+    )
+    assert result.metadata["capability"]["validation_class"] == "extended_patch_test"
 
 
 def test_published_crack_coordinate_is_segment_local_and_scale_invariant():
@@ -490,6 +565,22 @@ def test_crack_opening_extrapolation_recovers_exact_mixed_mode_tips():
             targets[report.tip_id], rel=2.0e-5
         )
         assert report.path_variation < 2.0e-5
+
+
+def test_crack_opening_extrapolation_removes_finite_center_crack_correction():
+    radii = np.asarray((0.05, 0.1, 0.15), dtype=float)
+    expected = 2.5e6
+    finite_radius = expected * np.sqrt(1.0 - radii / 2.0)
+    report = CrackOpeningSIFReport2D(
+        tip_id="main:end",
+        radii=tuple(radii),
+        k_i_by_radius=tuple(finite_radius),
+        k_ii_by_radius=(0.0, 0.0, 0.0),
+    )
+
+    assert report.k_i == pytest.approx(expected, rel=8.0e-4)
+    assert report.k_ii == pytest.approx(0.0, abs=1.0e-12)
+    assert report.path_variation < 2.0e-4
 
 
 def test_multi_crack_report_extracts_every_tip_with_stable_identity():

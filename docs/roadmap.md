@@ -92,7 +92,8 @@ diagnostic evidence, not a benchmark pass.
 
 | Gate | Current state | Promotion evidence |
 |---|---|---|
-| finite-domain mixed Mode I/II | public extended patch test accepted | hard spatial boundary, one active tip, `K_I/K_II`, path, traction and equilibrium checks pass; classified as patch evidence |
+| finite-domain mixed Mode I/II | public X-VEM extended patch test accepted | hard spatial boundary, one active tip, `K_I/K_II`, path, traction and equilibrium checks pass; classified as patch evidence |
+| finite center-crack kinematics | public Westergaard extended patch test accepted | both active tips recover normalized `K_I` within 0.1%; equilibrium, face traction, energy refinement and independent SIF agreement pass |
 | interacting two-crack field | exact four-tip collinear reference registered | one result must reproduce all four tips; no averaging across tips |
 | cut-domain integration | implemented and regression-tested | area-conserving regular/cut/tip cells, one-sided point identity, distinct training/validation/refinement fingerprints |
 | multi-axis numerical stability | executable bounded-memory audit | network, quadrature, seed, and ring axes must each pass |
@@ -106,17 +107,16 @@ channels, deterministic integration, and load-derived initialization removed
 several numerical ambiguities, but the converged field still failed SIF,
 path-independence, crack-face traction, and bulk-equilibrium acceptance. The
 spatial hard-Dirichlet and active-tip milestone is now implemented. The
-published X-VEM problem is intentionally classified as an extended patch test
-because its analytic field supplies the essential boundary data and admissible
-interior lifting. Aligned face/tip integration and an analytic finite-crack
-two-sheet coordinate raised the Griffith diagnostic to normalized `K_I` about
-0.84 and lowered path variation to about 1.0%. Extractor disagreement fell to
-about 28%, but crack-face traction remained about 75%, so the gate remains
-closed. Published distance-decay and bounded-sheet input forms were also
-executed and rejected as defaults. The next milestone is high-budget and
-domain-size convergence of the analytic two-sheet candidate, followed by a
-traction-free correction that does not suppress the physical crack response,
-then the four-tip collinear-crack reference.
+published X-VEM and exact Westergaard problems are intentionally classified as
+extended patch tests because analytic fields supply admissible interior
+liftings. The latter recovers both normalized center-crack `K_I` values as
+0.99924; equilibrium, crack-face traction, energy refinement, path and
+independent COD checks all pass. The separate traction-driven Griffith
+prediction remains closed: its analytic two-sheet representation reaches
+normalized `K_I` about 0.84 with about 1% path variation, but crack-face
+traction remains about 75%. The next predictive milestone is a traction-free
+correction that does not suppress the physical crack response, followed by
+domain-size convergence and the four-tip collinear-crack reference.
 
 Registering a reference is not a solver pass. The single-crack reference uses
 Benvenuti et al.'s public mixed-mode X-VEM problem and preserves its boundary
@@ -132,6 +132,7 @@ Official references:
 - [DeepXDE backend installation](https://deepxde.readthedocs.io/en/stable/user/installation.html)
 - [PyTorch serialization semantics](https://docs.pytorch.org/docs/stable/notes/serialization.html)
 - [Benvenuti et al., mixed-mode X-VEM benchmarks](https://arxiv.org/abs/2111.04150)
+- [Westergaard center-crack displacement formulation and verification](https://doi.org/10.1007/s10704-019-00351-3)
 - [Liew et al., tabulated two-collinear-crack reference](https://doi.org/10.1002/nme.1786)
 - [Wang et al., XDEM graph-field architecture](https://www.nature.com/articles/s41467-026-76748-1)
 - [Official XDEM reference implementation](https://github.com/yizheng-wang/XDEM)
