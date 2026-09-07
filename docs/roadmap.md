@@ -66,13 +66,27 @@ core `model.step(target=spec, executor=...)` boundary.
 
 ### Neural operators
 
-- Begin with a data-processor adapter from `ScientificDataset`,
-  `FieldEncoding`, and `ObservationGrid` to explicit keyed input/output
-  batches.
-- Bind the maintained `neuraloperator` trainer and models rather than cloning
-  FNO implementations into AgentFEM-Learning.
-- Return held-out field error, boundary/balance error, resolution transfer,
-  applicability, and model-state artifacts through AgentFEM evidence.
+- **Structured field foundation implemented:** core `ScientificFieldDataset`
+  preserves complete channel-first fields, parameters, masks, case evidence,
+  deterministic partitions and content identity without depending on a
+  learning framework.
+- **Official FNO/TFNO provider implemented:** the maintained `neuraloperator`
+  models are selected through AgentFEM's ordinary Step provider. The companion
+  owns normalization, deterministic splits, early stopping, best-state
+  recovery, safe tensor-only model state, reloadable inference and bounded
+  training evidence rather than cloning an FNO implementation.
+- **First FEM-to-operator case implemented:** a family of AgentFEM steady heat
+  solutions produces a fingerprinted source-to-temperature field dataset and
+  held-out result evidence.
+- Add user-supplied boundary, balance and out-of-distribution evaluators. The
+  generic trainer currently records these default checks as inconclusive
+  rather than inferring them from supervised loss.
+- Add explicit resolution-transfer evidence using independently generated
+  higher-resolution cases.
+- Bind GINO next for coordinate-defined, geometry-varying finite-element
+  families. Do not force irregular meshes through padding merely to use FNO.
+- Add external PDEBench/The Well adapters only as downloaded benchmark
+  contracts; do not bundle their large datasets or make them the user API.
 - Do not route neural operators through `NeuralFieldSpec`: a function-to-
   function map and a per-problem optimized field are different contracts.
 

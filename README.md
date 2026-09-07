@@ -16,11 +16,14 @@ AgentFEM-Learning maintained method providers, examples, benchmark evidence
 user packages      laboratory-owned or private models using the same contract
 ```
 
-The first provider family is `neural_fields.xdem`, proving one complete workflow:
+The first provider families now prove two distinct complete workflows:
 
 ```text
 NeuralFieldSpec -> AgentFEM Step Provider -> PyTorch energy optimization
                 -> SimulationResult -> field artifact + verification evidence
+
+NeuralOperatorSpec + ScientificFieldDataset -> official NeuralOperator FNO/TFNO
+                -> held-out field evidence + reloadable model artifact
 ```
 
 The XDEM providers are experimental. The packaging regression is a normalized
@@ -75,7 +78,8 @@ The repository is broad; its scientific subdomains remain narrow:
 agentfem_learning
   neural_fields
     xdem
-  neural_operators       # future, distinct from neural-field solvers
+  neural_operators
+    neuraloperator       # FNO/TFNO on structured scientific fields
   learned_constitutive   # future
 ```
 
@@ -86,10 +90,10 @@ boundary is specified in the
 
 ## Installation during development
 
-The vector provider targets the next AgentFEM release containing the common
-LEFM interaction-integral contract (`agentfem>=0.2.6`). Until that release is
-published, keep `agentfem` and `agentfem-learning` as sibling repositories and
-use the current AgentFEM source tree for development.
+The current development line consumes the field-dataset and learning contracts
+from AgentFEM `0.3.2.dev0`. Until that core release is published, keep
+`agentfem` and `agentfem-learning` as sibling repositories and install both
+source trees into one isolated environment.
 
 For a conda-forge FEniCSx environment, install PyTorch from conda-forge so it
 shares the environment's OpenMP runtime:
@@ -98,7 +102,7 @@ shares the environment's OpenMP runtime:
 mamba install -n fenicsx-env -c conda-forge pytorch
 conda activate fenicsx-env
 python -m pip install -e ../agentfem
-python -m pip install -e '.[xdem]' --no-deps
+python -m pip install -e '.[xdem,neuraloperator]' --no-deps
 ```
 
 Run these commands from this repository root with the AgentFEM source tree in
@@ -119,7 +123,30 @@ python examples/finite_domain_benchmarks/case.py --case xvem
 python examples/finite_domain_benchmarks/case.py --case center_exact
 python examples/finite_domain_benchmarks/case.py --case center
 python examples/finite_domain_benchmarks/case.py --case two
+python examples/fno_heat_operator/case.py --output outputs/fno_heat_operator
 ```
+
+The heat example is a real FEM-to-operator path: AgentFEM solves a family of
+steady conduction cases, samples source and temperature fields on a declared
+observation grid, fingerprints the resulting `ScientificFieldDataset`, and
+trains an official NeuralOperator FNO through `model.step(...)`. The returned
+`SimulationResult` contains the held-out physical-field error, bounded training
+history, exact dataset identity, model state, and unresolved scientific checks.
+
+```python
+extensions.load_extension("agentfem-learning.neuraloperator")
+
+result = model.step(
+    target=operator_spec,
+    dataset=field_dataset,
+    n_modes=(8, 8),
+    hidden_channels=32,
+    output="outputs/heat_operator",
+).solve_result()
+```
+
+See [neural operators](docs/neural_operators.md) for the capability boundary,
+artifacts, reload API, and the planned FNO-to-GINO progression.
 
 The `xvem` and `center_exact` commands are public extended patch tests and
 should be accepted. The latter supplies the exact Westergaard field throughout
