@@ -4,11 +4,20 @@ import json
 
 import numpy as np
 import pytest
-from agentfem import datasets, extensions, learning, models, provenance, studies
+from agentfem import (
+    datasets,
+    extensions,
+    learning,
+    models,
+    provenance,
+    studies,
+    verification,
+)
 from agentfem.step_providers import step_providers
 
 from agentfem_learning.neural_operators.neuraloperator import (
     NeuralOperatorTrainingOptions,
+    OperatorCheck,
     load_predictor,
     train_operator,
 )
@@ -23,8 +32,12 @@ def _activate_extension():
     context.commit()
 
 
-def _operator_dataset(case_count: int = 18):
-    shape = (1, 8, 8)
+def _operator_dataset(
+    case_count: int = 18,
+    spatial_size: int = 8,
+    case_prefix: str = "heat",
+):
+    shape = (1, spatial_size, spatial_size)
     source = learning.FieldEncoding(
         name="source",
         role="input",
@@ -41,8 +54,8 @@ def _operator_dataset(case_count: int = 18):
         shape=shape,
         mesh_policy="mesh_independent_coordinates",
     )
-    x = np.linspace(0.0, 1.0, 8)
-    y = np.linspace(0.0, 1.0, 8)
+    x = np.linspace(0.0, 1.0, spatial_size)
+    y = np.linspace(0.0, 1.0, spatial_size)
     xx, yy = np.meshgrid(x, y, indexing="ij")
     spatial = np.sin(np.pi * xx) * np.sin(np.pi * yy)
     amplitudes = np.linspace(0.5, 2.0, case_count)
@@ -50,7 +63,7 @@ def _operator_dataset(case_count: int = 18):
     outputs = 2.5 * inputs
     return (
         datasets.ScientificFieldDataset(
-            case_ids=tuple(f"heat-{index:03d}" for index in range(case_count)),
+            case_ids=tuple(f"{case_prefix}-{index:03d}" for index in range(case_count)),
             encodings=(source, temperature),
             fields={"source": inputs, "temperature_rise": outputs},
             parameters={"gain": np.linspace(0.0, 1.0, case_count)},
@@ -204,3 +217,92 @@ def test_tfno_architecture_and_masked_geometry_fail_closed():
             masked,
             NeuralOperatorTrainingOptions(epochs=1, n_modes=(2, 2)),
         )
+
+
+def _boundary_condition_check(context):
+    prediction = context.predictions["temperature_rise"]
+    boundary = np.concatenate(
+        (
+            prediction[:, :, 0, :].reshape(-1),
+            prediction[:, :, -1, :].reshape(-1),
+            prediction[:, :, :, 0].reshape(-1),
+            prediction[:, :, :, -1].reshape(-1),
+        )
+    )
+    return verification.VerificationClaim.compare(
+        name="boundary_condition_error",
+        observable="maximum_boundary_temperature_rise",
+        actual=float(np.max(np.abs(boundary))),
+        expected=0.0,
+        reference="manufactured homogeneous Dirichlet boundary",
+        absolute_tolerance=10.0,
+        validity_domain="held-out manufactured heat fields",
+    )
+
+
+def test_named_physics_check_is_fingerprinted_and_satisfies_required_check(tmp_path):
+    _activate_extension()
+    dataset, base = _operator_dataset()
+    specification = learning.NeuralOperatorSpec(
+        architecture="fno",
+        inputs=base.inputs,
+        outputs=base.outputs,
+        parameter_inputs=base.parameter_inputs,
+        boundary_encoding="structured_grid",
+        required_checks=("held_out_field_error", "boundary_condition_error"),
+    )
+    check = OperatorCheck(
+        name="boundary_condition_error",
+        evaluator=_boundary_condition_check,
+        version="manufactured-v1",
+    )
+    model = models.create(
+        study=studies.steady_heat_transfer(dimension=2),
+        name="checked_heat_operator",
+    )
+    result = model.step(
+        target=specification,
+        dataset=dataset,
+        check_evaluators=(check,),
+        n_modes=(2, 2),
+        hidden_channels=4,
+        n_layers=1,
+        epochs=2,
+        relative_l2_tolerance=10.0,
+        output=tmp_path / "checked",
+    ).solve_result()
+
+    assert result.metadata["verification_coverage"]["missing"] == ()
+    evaluator = result.metadata["check_evaluators"][0]["evaluator"]
+    assert evaluator["qualname"] == "_boundary_condition_check"
+    assert "source_sha256" in evaluator
+    assert result.verification.acceptable is True
+
+
+def test_resolution_transfer_requires_a_different_spatial_resolution():
+    dataset, base = _operator_dataset()
+    same_resolution, _ = _operator_dataset(case_count=4, case_prefix="same-test")
+    changed_resolution, _ = _operator_dataset(
+        case_count=4,
+        spatial_size=10,
+        case_prefix="changed-test",
+    )
+    options = NeuralOperatorTrainingOptions(
+        n_modes=(2, 2),
+        hidden_channels=4,
+        n_layers=1,
+        epochs=2,
+        batch_size=6,
+        patience=2,
+        device="cpu",
+    )
+
+    same = train_operator(base, dataset, options, test_dataset=same_resolution)
+    changed = train_operator(base, dataset, options, test_dataset=changed_resolution)
+
+    assert same.resolution_transfer is False
+    assert changed.resolution_transfer is True
+    assert "test_relative_l2_error" in changed.metrics
+
+    with pytest.raises(ValueError, match="case IDs must be disjoint"):
+        train_operator(base, dataset, options, test_dataset=dataset.subset(range(4)))

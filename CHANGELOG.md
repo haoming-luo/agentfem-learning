@@ -14,6 +14,12 @@
 - Keep boundary, balance and out-of-distribution checks explicitly
   inconclusive unless a provider computes them; supervised loss alone does not
   promote a learned operator to broad scientific validity.
+- Add named, source-fingerprinted `OperatorCheck` evaluators, reject case-ID
+  overlap between data partitions, and distinguish genuine spatial-resolution
+  transfer from another held-out dataset on the training grid.
+- Define the GINO provider boundary: geometry-identity batching, explicit
+  coordinate roles, separate geometry-transfer evidence, and fail-closed
+  handling of variable-size families until ragged scientific storage exists.
 
 - Add the independent AgentFEM extension entry point.
 - Add a provider-neutral Mode-III `NeuralFieldSpec`.

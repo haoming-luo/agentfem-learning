@@ -129,9 +129,11 @@ python examples/fno_heat_operator/case.py --output outputs/fno_heat_operator
 The heat example is a real FEM-to-operator path: AgentFEM solves a family of
 steady conduction cases, samples source and temperature fields on a declared
 observation grid, fingerprints the resulting `ScientificFieldDataset`, and
-trains an official NeuralOperator FNO through `model.step(...)`. The returned
-`SimulationResult` contains the held-out physical-field error, bounded training
-history, exact dataset identity, model state, and unresolved scientific checks.
+trains an official NeuralOperator FNO through `model.step(...)`. A second set
+of FEM cases uses independent parameter values and a finer observation grid.
+The returned `SimulationResult` contains held-out and resolution-transfer
+physical-field errors, bounded training history, exact dataset identities,
+model state, and any unresolved scientific checks.
 
 ```python
 extensions.load_extension("agentfem-learning.neuraloperator")

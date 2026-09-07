@@ -21,6 +21,8 @@ extension = extensions.Extension(
             "learning.neural_operator.tfno",
             "learning.field_dataset",
             "learning.held_out_field_verification",
+            "learning.physics_check_evaluators",
+            "learning.resolution_transfer_verification",
             "results.simulation_result",
         ),
     ),

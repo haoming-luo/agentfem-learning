@@ -69,15 +69,19 @@ def _solve_heat_case(amplitude: float, center_x: float, *, grid):
     return source_values, observation.values, simulation
 
 
-def build_dataset(*, smoke: bool = False):
-    shape = (8, 8) if smoke else (20, 20)
+def _build_field_dataset(
+    *,
+    shape,
+    amplitudes,
+    centers,
+    name: str,
+    case_prefix: str,
+):
     grid = learning.regular_grid(
         bounds=((0.025, 0.975), (0.025, 0.975)),
         shape=shape,
         coordinate_unit="m",
     )
-    amplitudes = np.linspace(5.0e4, 2.0e5, 3 if smoke else 5)
-    centers = np.linspace(0.25, 0.75, 4 if smoke else 6)
     sources = []
     temperatures = []
     case_ids = []
@@ -90,7 +94,7 @@ def build_dataset(*, smoke: bool = False):
                 center_x,
                 grid=grid,
             )
-            case_id = f"q-{amplitude:.0f}-x-{center_x:.3f}"
+            case_id = f"{case_prefix}-q-{amplitude:.0f}-x-{center_x:.3f}"
             sources.append(source[None, ...])
             temperatures.append(temperature[None, ...])
             case_ids.append(case_id)
@@ -118,7 +122,7 @@ def build_dataset(*, smoke: bool = False):
         mesh_policy="mesh_independent_coordinates",
     )
     values = np.asarray(parameters)
-    dataset = datasets.ScientificFieldDataset(
+    return datasets.ScientificFieldDataset(
         case_ids=tuple(case_ids),
         encodings=(source_encoding, temperature_encoding),
         fields={
@@ -130,11 +134,22 @@ def build_dataset(*, smoke: bool = False):
             "source_center_x": values[:, 1],
         },
         case_metadata=tuple(case_metadata),
-        name="agentfem_heat_source_operator",
+        name=name,
         metadata={
             "generator": "AgentFEM steady heat transfer",
             "observation_grid": grid.summary(),
         },
+    ), source_encoding, temperature_encoding
+
+
+def build_dataset(*, smoke: bool = False):
+    shape = (8, 8) if smoke else (20, 20)
+    dataset, source_encoding, temperature_encoding = _build_field_dataset(
+        shape=shape,
+        amplitudes=np.linspace(5.0e4, 2.0e5, 3 if smoke else 5),
+        centers=np.linspace(0.25, 0.75, 4 if smoke else 6),
+        name="agentfem_heat_source_operator",
+        case_prefix="train",
     )
     specification = learning.NeuralOperatorSpec(
         architecture="fno",
@@ -142,9 +157,20 @@ def build_dataset(*, smoke: bool = False):
         outputs=(temperature_encoding,),
         boundary_encoding="fixed_isothermal_exterior",
         parameter_inputs=("source_amplitude", "source_center_x"),
-        required_checks=("held_out_field_error",),
+        required_checks=("held_out_field_error", "resolution_transfer"),
     )
     return dataset, specification
+
+
+def build_resolution_dataset(*, smoke: bool = False):
+    dataset, _, _ = _build_field_dataset(
+        shape=(12, 12) if smoke else (28, 28),
+        amplitudes=(7.5e4, 1.75e5),
+        centers=(0.35, 0.65),
+        name="agentfem_heat_source_operator_resolution_transfer",
+        case_prefix="resolution",
+    )
+    return dataset
 
 
 def main():
@@ -157,7 +183,9 @@ def main():
 
     extensions.load_extension("agentfem-learning.neuraloperator")
     dataset, specification = build_dataset(smoke=arguments.smoke)
+    resolution_dataset = build_resolution_dataset(smoke=arguments.smoke)
     dataset.write(output / "field_dataset")
+    resolution_dataset.write(output / "resolution_dataset")
     model = models.create(
         study=studies.steady_heat_transfer(dimension=2),
         name="heat_source_to_temperature_operator",
@@ -165,6 +193,7 @@ def main():
     result = model.step(
         target=specification,
         dataset=dataset,
+        test_dataset=resolution_dataset,
         n_modes=(3, 3) if arguments.smoke else (8, 8),
         hidden_channels=16 if arguments.smoke else 32,
         n_layers=3 if arguments.smoke else 4,
@@ -178,6 +207,10 @@ def main():
     ).solve_result()
     print(result.format())
     print(f"Field dataset: {output / 'field_dataset' / 'manifest.json'}")
+    print(
+        "Resolution dataset: "
+        f"{output / 'resolution_dataset' / 'manifest.json'}"
+    )
     print(f"Training result: {output / 'training' / 'result.json'}")
     return result
 

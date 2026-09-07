@@ -11,6 +11,7 @@ from agentfem.step_providers import StepOptionContract, StepProvider
 from agentfem_learning import __version__
 
 from .api import NeuralOperatorTrainingOptions, train_operator
+from .checks import OperatorCheck, OperatorCheckContext
 
 _IMPLEMENTED_CHECKS = {"held_out_field_error", "resolution_transfer"}
 
@@ -26,6 +27,7 @@ class NeuralOperatorStep:
         options: NeuralOperatorTrainingOptions,
         validation_dataset=None,
         test_dataset=None,
+        check_evaluators=(),
         output=None,
         name: str = "neural_operator",
     ) -> None:
@@ -34,6 +36,7 @@ class NeuralOperatorStep:
         self.options = options
         self.validation_dataset = validation_dataset
         self.test_dataset = test_dataset
+        self.check_evaluators = _validated_check_evaluators(check_evaluators)
         self.output = None if output is None else Path(output).expanduser().resolve()
         self.name = str(name)
         self.step_number = 0
@@ -53,11 +56,27 @@ class NeuralOperatorStep:
             validation_dataset=self.validation_dataset,
             test_dataset=self.test_dataset,
         )
+        custom_claims = tuple(
+            check.evaluate(
+                OperatorCheckContext(
+                    specification=self.specification,
+                    training_dataset=self.dataset,
+                    validation_dataset=outcome.validation_dataset,
+                    predictions=outcome.predictions,
+                    references=outcome.references,
+                    metrics=outcome.metrics,
+                )
+            )
+            for check in self.check_evaluators
+        )
+        implemented_checks = {"held_out_field_error"}
+        if outcome.resolution_transfer:
+            implemented_checks.add("resolution_transfer")
+        implemented_checks.update(check.name for check in self.check_evaluators)
         missing_checks = tuple(
             item
             for item in self.specification.required_checks
-            if item not in _IMPLEMENTED_CHECKS
-            or (item == "resolution_transfer" and self.test_dataset is None)
+            if item not in implemented_checks
         )
         result = results.SimulationResult(
             self.name if name is None else str(name),
@@ -69,13 +88,15 @@ class NeuralOperatorStep:
                 "training_options": asdict(self.options),
                 "training": outcome.ledger.summary(),
                 "dataset": self.dataset.summary(),
+                "check_evaluators": [
+                    check.summary() for check in self.check_evaluators
+                ],
                 "verification_coverage": {
                     "required": self.specification.required_checks,
                     "implemented": tuple(
                         item
                         for item in self.specification.required_checks
-                        if item in _IMPLEMENTED_CHECKS
-                        and not (item == "resolution_transfer" and self.test_dataset is None)
+                        if item in implemented_checks
                     ),
                     "missing": missing_checks,
                 },
@@ -91,6 +112,9 @@ class NeuralOperatorStep:
         result.add_scientific_inputs(
             specification=self.specification,
             dataset=self.dataset,
+            operator_checks=tuple(
+                check.summary() for check in self.check_evaluators
+            ),
         )
         result.add_quantities(outcome.metrics, kind="operator_verification")
         result.add_quantity(
@@ -144,8 +168,9 @@ class NeuralOperatorStep:
                 )
 
         claims = [_held_out_claim(outcome.metrics, self.options)]
-        if self.test_dataset is not None:
+        if outcome.resolution_transfer:
             claims.append(_resolution_claim(outcome.metrics, self.options))
+        claims.extend(custom_claims)
         claims.extend(_inconclusive_claim(name) for name in missing_checks)
         result.add_verification(
             verification.VerificationReport(
@@ -249,6 +274,7 @@ def _lower_neuraloperator(model, request):
             options=options,
             validation_dataset=request.option("validation_dataset"),
             test_dataset=request.option("test_dataset"),
+            check_evaluators=request.option("check_evaluators", ()),
             output=request.option("output"),
             name=request.option("name") or "neural_operator",
         )
@@ -278,6 +304,7 @@ NEURALOPERATOR_PROVIDER = StepProvider(
             "dataset",
             "validation_dataset",
             "test_dataset",
+            "check_evaluators",
             "name",
             "output",
             "n_modes",
@@ -302,3 +329,19 @@ NEURALOPERATOR_PROVIDER = StepProvider(
 
 
 __all__ = ["NEURALOPERATOR_PROVIDER", "NeuralOperatorStep"]
+
+
+def _validated_check_evaluators(values) -> tuple[OperatorCheck, ...]:
+    checks = tuple(values or ())
+    if any(not isinstance(item, OperatorCheck) for item in checks):
+        raise TypeError("check_evaluators must contain OperatorCheck records.")
+    names = tuple(item.name for item in checks)
+    if len(set(names)) != len(names):
+        raise ValueError("Operator check evaluator names must be unique.")
+    reserved = set(names).intersection(_IMPLEMENTED_CHECKS)
+    if reserved:
+        raise ValueError(
+            "Custom operator checks may not replace provider-owned checks "
+            f"{tuple(sorted(reserved))}."
+        )
+    return checks

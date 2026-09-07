@@ -78,13 +78,23 @@ core `model.step(target=spec, executor=...)` boundary.
 - **First FEM-to-operator case implemented:** a family of AgentFEM steady heat
   solutions produces a fingerprinted source-to-temperature field dataset and
   held-out result evidence.
-- Add user-supplied boundary, balance and out-of-distribution evaluators. The
-  generic trainer currently records these default checks as inconclusive
-  rather than inferring them from supervised loss.
-- Add explicit resolution-transfer evidence using independently generated
-  higher-resolution cases.
+- **Scientific evaluator contract implemented:** named project-owned boundary,
+  balance and applicability checks return ordinary `VerificationClaim`
+  records. Their version and callable source identity travel with the result;
+  missing required checks remain inconclusive rather than being inferred from
+  supervised loss.
+- **Resolution-transfer semantics implemented:** an independent test dataset
+  satisfies this check only when its spatial resolution differs. Data leakage
+  is rejected through disjoint train/validation/test case identities. The
+  flagship heat workflow now generates independent fine-grid FEM cases and
+  records their transfer error as a separate verification claim.
 - Bind GINO next for coordinate-defined, geometry-varying finite-element
-  families. Do not force irregular meshes through padding merely to use FNO.
+  families under the [geometry-informed provider
+  contract](gino_provider_contract.md). Begin with fixed-size registered
+  point sets, group native mini-batches by exact geometry identity, and use
+  gradient-accumulated micro-batches for distinct geometries. Add case-indexed
+  ragged storage before claiming variable point counts; do not force irregular
+  meshes through padding merely to use FNO.
 - Add external PDEBench/The Well adapters only as downloaded benchmark
   contracts; do not bundle their large datasets or make them the user API.
 - Do not route neural operators through `NeuralFieldSpec`: a function-to-

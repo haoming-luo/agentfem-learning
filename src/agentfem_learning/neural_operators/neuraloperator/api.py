@@ -92,7 +92,9 @@ class NeuralOperatorOutcome:
     model_configuration: Mapping[str, object]
     train_case_ids: tuple[str, ...]
     validation_case_ids: tuple[str, ...]
+    validation_dataset: object
     test_case_ids: tuple[str, ...] = ()
+    resolution_transfer: bool = False
 
     def write(self, path: str | Path, *, specification, dataset) -> dict[str, Path]:
         """Write reloadable weights, predictions, and bounded training evidence."""
@@ -276,6 +278,7 @@ def train_operator(
         _validate_contract(specification, validation)
     if test_dataset is not None:
         _validate_contract(specification, test_dataset, allow_resolution_change=True)
+    _require_disjoint_case_ids(training, validation, test_dataset)
 
     device = _resolve_device(options.device, torch)
     dtype = torch.float64 if options.dtype == "float64" else torch.float32
@@ -406,6 +409,7 @@ def train_operator(
         prefix="validation",
     )
     test_case_ids: tuple[str, ...] = ()
+    resolution_transfer = False
     if test_dataset is not None:
         _, _, test_metrics = _evaluate(
             model,
@@ -419,6 +423,11 @@ def train_operator(
         )
         metrics.update(test_metrics)
         test_case_ids = test_dataset.case_ids
+        resolution_transfer = any(
+            test_dataset.fields[name].shape[2:]
+            != training.fields[name].shape[2:]
+            for name in (*training.input_names, *training.output_names)
+        )
     return NeuralOperatorOutcome(
         model=model,
         ledger=ledger,
@@ -430,7 +439,9 @@ def train_operator(
         model_configuration=configuration,
         train_case_ids=training.case_ids,
         validation_case_ids=validation.case_ids,
+        validation_dataset=validation,
         test_case_ids=test_case_ids,
+        resolution_transfer=resolution_transfer,
     )
 
 
@@ -537,6 +548,23 @@ def _validate_field_family(arrays: list[np.ndarray], *, label: str) -> None:
     spatial_shapes = {array.shape[2:] for array in arrays}
     if len(sample_counts) != 1 or len(spatial_shapes) != 1:
         raise ValueError(f"{label} must share case counts and spatial grids.")
+
+
+def _require_disjoint_case_ids(*collections) -> None:
+    owners: dict[str, int] = {}
+    overlaps = set()
+    for collection_index, collection in enumerate(collections):
+        if collection is None:
+            continue
+        for case_id in collection.case_ids:
+            if case_id in owners and owners[case_id] != collection_index:
+                overlaps.add(case_id)
+            owners[case_id] = collection_index
+    if overlaps:
+        raise ValueError(
+            "Training, validation, and test case IDs must be disjoint; "
+            f"overlap={sorted(overlaps)}."
+        )
 
 
 def _matrices(specification, dataset) -> tuple[np.ndarray, np.ndarray]:

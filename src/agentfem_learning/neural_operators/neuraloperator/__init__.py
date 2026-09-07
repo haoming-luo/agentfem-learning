@@ -7,6 +7,7 @@ from .api import (
     load_predictor,
     train_operator,
 )
+from .checks import OperatorCheck, OperatorCheckContext
 from .provider import NEURALOPERATOR_PROVIDER, NeuralOperatorStep
 
 __all__ = [
@@ -15,6 +16,8 @@ __all__ = [
     "NeuralOperatorPredictor",
     "NeuralOperatorStep",
     "NeuralOperatorTrainingOptions",
+    "OperatorCheck",
+    "OperatorCheckContext",
     "load_predictor",
     "train_operator",
 ]

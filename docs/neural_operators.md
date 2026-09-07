@@ -33,6 +33,7 @@ The provider performs:
 - AdamW optimization, early stopping and best-state restoration;
 - held-out relative L2 error in physical units;
 - optional independent resolution-transfer testing;
+- disjoint case-identity enforcement across training, validation, and test data;
 - safe tensor-only state persistence and reloadable prediction;
 - a bounded `TrainingLedger` and ordinary AgentFEM `SimulationResult`.
 
@@ -79,15 +80,41 @@ than a pickled live Python model.
 
 The generic provider can compute held-out field error. Boundary error,
 conservation or balance error, and out-of-distribution behavior depend on the
-physics and must be supplied by a reviewed problem adapter. When these checks
-are required but unavailable, the result records an inconclusive claim and
-does not silently promote the model.
+physics and must be supplied by a reviewed problem adapter. A named
+`OperatorCheck` receives the held-out physical prediction, reference fields,
+dataset, specification, and metrics, and must return an AgentFEM
+`VerificationClaim`. Its version, callable identity, and source hash are part
+of the result's scientific inputs. When required checks are unavailable, the
+result records an inconclusive claim and does not silently promote the model.
+
+```python
+check = OperatorCheck(
+    name="conservation_or_balance_error",
+    evaluator=heat_balance_check,
+    version="steady-heat-v1",
+)
+
+result = model.step(
+    target=operator_spec,
+    dataset=field_dataset,
+    check_evaluators=(check,),
+).solve_result()
+```
+
+The built-in `resolution_transfer` claim is emitted only when an independent
+test dataset actually changes the spatial resolution. Supplying another
+dataset on the training resolution remains ordinary held-out testing and does
+not satisfy that check.
 
 FNO/TFNO is therefore the first structured-grid route, not a universal finite
 operator. Geometry-varying and unstructured finite-element families should
 use coordinate-aware operators. The next maintained target is GINO, whose
 official formulation maps between arbitrary coordinate meshes and latent
-regular grids.
+regular grids. Its implementation boundary is defined in the
+[geometry-informed provider contract](gino_provider_contract.md): the first
+release will group cases by geometry identity and will reject variable-size
+families until case-indexed ragged storage exists. It will not disguise an
+irregular mesh as a padded FNO tensor.
 
 ## Storage progression
 
