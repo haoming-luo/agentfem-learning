@@ -66,13 +66,37 @@ core `model.step(target=spec, executor=...)` boundary.
 
 ### Neural operators
 
-- Begin with a data-processor adapter from `ScientificDataset`,
-  `FieldEncoding`, and `ObservationGrid` to explicit keyed input/output
-  batches.
-- Bind the maintained `neuraloperator` trainer and models rather than cloning
-  FNO implementations into AgentFEM-Learning.
-- Return held-out field error, boundary/balance error, resolution transfer,
-  applicability, and model-state artifacts through AgentFEM evidence.
+- **Structured field foundation implemented:** core `ScientificFieldDataset`
+  preserves complete channel-first fields, parameters, masks, case evidence,
+  deterministic partitions and content identity without depending on a
+  learning framework.
+- **Official FNO/TFNO provider implemented:** the maintained `neuraloperator`
+  models are selected through AgentFEM's ordinary Step provider. The companion
+  owns normalization, deterministic splits, early stopping, best-state
+  recovery, safe tensor-only model state, reloadable inference and bounded
+  training evidence rather than cloning an FNO implementation.
+- **First FEM-to-operator case implemented:** a family of AgentFEM steady heat
+  solutions produces a fingerprinted source-to-temperature field dataset and
+  held-out result evidence.
+- **Scientific evaluator contract implemented:** named project-owned boundary,
+  balance and applicability checks return ordinary `VerificationClaim`
+  records. Their version and callable source identity travel with the result;
+  missing required checks remain inconclusive rather than being inferred from
+  supervised loss.
+- **Resolution-transfer semantics implemented:** an independent test dataset
+  satisfies this check only when its spatial resolution differs. Data leakage
+  is rejected through disjoint train/validation/test case identities. The
+  flagship heat workflow now generates independent fine-grid FEM cases and
+  records their transfer error as a separate verification claim.
+- Bind GINO next for coordinate-defined, geometry-varying finite-element
+  families under the [geometry-informed provider
+  contract](gino_provider_contract.md). Begin with fixed-size registered
+  point sets, group native mini-batches by exact geometry identity, and use
+  gradient-accumulated micro-batches for distinct geometries. Add case-indexed
+  ragged storage before claiming variable point counts; do not force irregular
+  meshes through padding merely to use FNO.
+- Add external PDEBench/The Well adapters only as downloaded benchmark
+  contracts; do not bundle their large datasets or make them the user API.
 - Do not route neural operators through `NeuralFieldSpec`: a function-to-
   function map and a per-problem optimized field are different contracts.
 

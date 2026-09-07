@@ -19,16 +19,18 @@ classifiers = [
   "Topic :: Scientific/Engineering",
 ]
 dependencies = [
-  "agentfem>=0.2.6",
+  "agentfem>=0.3.2.dev0",
   "numpy>=1.26",
 ]
 
 [project.optional-dependencies]
 xdem = ["torch>=2.0,<3"]
-test = ["pytest>=8", "ruff>=0.9", "torch>=2.0,<3"]
+neuraloperator = ["torch>=2.0,<3", "neuraloperator>=2.0,<3"]
+test = ["pytest>=8", "ruff>=0.9", "torch>=2.0,<3", "neuraloperator>=2.0,<3"]
 
 [project.entry-points."agentfem.extensions"]
 "agentfem-learning.xdem" = "agentfem_learning.neural_fields.xdem.extension:extension"
+"agentfem-learning.neuraloperator" = "agentfem_learning.neural_operators.neuraloperator.extension:extension"
 
 [project.urls]
 Homepage = "https://github.com/haoming-luo/agentfem-learning"

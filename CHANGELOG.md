@@ -2,6 +2,25 @@
 
 ## 0.1.0a1 - Unreleased
 
+- Add the first official NeuralOperator provider with FNO and TFNO models,
+  deterministic field-dataset splitting, channel normalization, early
+  stopping, best-state recovery, held-out physical-field error, safe
+  tensor-only checkpoints and reloadable inference.
+- Add a shared framework-neutral training ledger so later neural-operator,
+  neural-field and user-provider workflows can retain the same bounded
+  optimization evidence.
+- Add a real AgentFEM steady-heat-to-FNO example using the core
+  `ScientificFieldDataset` contract and ordinary `model.step(...)` lifecycle.
+- Keep boundary, balance and out-of-distribution checks explicitly
+  inconclusive unless a provider computes them; supervised loss alone does not
+  promote a learned operator to broad scientific validity.
+- Add named, source-fingerprinted `OperatorCheck` evaluators, reject case-ID
+  overlap between data partitions, and distinguish genuine spatial-resolution
+  transfer from another held-out dataset on the training grid.
+- Define the GINO provider boundary: geometry-identity batching, explicit
+  coordinate roles, separate geometry-transfer evidence, and fail-closed
+  handling of variable-size families until ragged scientific storage exists.
+
 - Add the independent AgentFEM extension entry point.
 - Add a provider-neutral Mode-III `NeuralFieldSpec`.
 - Add a PyTorch Williams-enriched deep-energy reference Step.
