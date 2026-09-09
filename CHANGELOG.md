@@ -17,9 +17,13 @@
 - Add named, source-fingerprinted `OperatorCheck` evaluators, reject case-ID
   overlap between data partitions, and distinguish genuine spatial-resolution
   transfer from another held-out dataset on the training grid.
-- Define the GINO provider boundary: geometry-identity batching, explicit
-  coordinate roles, separate geometry-transfer evidence, and fail-closed
-  handling of variable-size families until ragged scientific storage exists.
+- Implement the official NeuralOperator GINO provider with distinct input,
+  latent and output geometries; exact-geometry native batches; cross-geometry
+  gradient accumulation; training-fitted coordinate transforms; graph-neighbor
+  coverage checks; safe reload; and separate geometry-transfer evidence.
+- Add a real varying-width AgentFEM heat-transfer example. Keep new topology,
+  ragged point families and optional accelerated neighbor backends outside the
+  first validated boundary.
 
 - Add the independent AgentFEM extension entry point.
 - Add a provider-neutral Mode-III `NeuralFieldSpec`.

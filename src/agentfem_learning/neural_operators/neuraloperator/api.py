@@ -424,8 +424,7 @@ def train_operator(
         metrics.update(test_metrics)
         test_case_ids = test_dataset.case_ids
         resolution_transfer = any(
-            test_dataset.fields[name].shape[2:]
-            != training.fields[name].shape[2:]
+            test_dataset.fields[name].shape[2:] != training.fields[name].shape[2:]
             for name in (*training.input_names, *training.output_names)
         )
     return NeuralOperatorOutcome(
@@ -459,6 +458,10 @@ def load_predictor(path: str | Path, *, device: str = "cpu") -> NeuralOperatorPr
     selected_device = _resolve_device(device, torch)
     record = torch.load(Path(path), map_location=selected_device, weights_only=True)
     configuration = dict(record["model_configuration"])
+    if configuration.get("architecture") == "gino":
+        from .gino import load_gino_predictor
+
+        return load_gino_predictor(path, device=device)
     architecture = configuration.pop("architecture")
     dtype_name = configuration.pop("dtype", "float32")
     dtype = torch.float64 if dtype_name == "float64" else torch.float32

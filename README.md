@@ -22,7 +22,7 @@ The first provider families now prove two distinct complete workflows:
 NeuralFieldSpec -> AgentFEM Step Provider -> PyTorch energy optimization
                 -> SimulationResult -> field artifact + verification evidence
 
-NeuralOperatorSpec + ScientificFieldDataset -> official NeuralOperator FNO/TFNO
+NeuralOperatorSpec + ScientificFieldDataset -> official NeuralOperator FNO/TFNO/GINO
                 -> held-out field evidence + reloadable model artifact
 ```
 
@@ -79,7 +79,7 @@ agentfem_learning
   neural_fields
     xdem
   neural_operators
-    neuraloperator       # FNO/TFNO on structured scientific fields
+    neuraloperator       # FNO/TFNO grids + GINO registered geometries
   learned_constitutive   # future
 ```
 
@@ -124,6 +124,7 @@ python examples/finite_domain_benchmarks/case.py --case center_exact
 python examples/finite_domain_benchmarks/case.py --case center
 python examples/finite_domain_benchmarks/case.py --case two
 python examples/fno_heat_operator/case.py --output outputs/fno_heat_operator
+python examples/gino_geometry_operator/case.py --output outputs/gino_geometry_operator --smoke
 ```
 
 The heat example is a real FEM-to-operator path: AgentFEM solves a family of
@@ -148,7 +149,7 @@ result = model.step(
 ```
 
 See [neural operators](docs/neural_operators.md) for the capability boundary,
-artifacts, reload API, and the planned FNO-to-GINO progression.
+artifacts, reload API, and the distinct structured-grid and geometry-aware paths.
 
 The `xvem` and `center_exact` commands are public extended patch tests and
 should be accepted. The latter supplies the exact Westergaard field throughout

@@ -3,7 +3,7 @@
 ## Purpose
 
 The first NeuralOperator provider learns maps on registered structured grids.
-The next geometry-aware provider will use GINO for finite-element families in
+The experimental geometry-aware provider uses GINO for finite-element families in
 which coordinates matter to the operator.  It must not present a padded FNO
 array as support for arbitrary meshes.
 
@@ -32,7 +32,7 @@ Changing any one invalidates cached training and inference artifacts.
 
 ## First supported family
 
-The first implementation should accept registered finite-element families
+The implemented first slice accepts registered finite-element families
 with fixed point count and channel meaning, while coordinates may vary by
 case.  Cases are grouped by an exact geometry fingerprint.  Cases sharing one
 geometry may form a mini-batch; distinct geometries execute as separate
@@ -43,24 +43,30 @@ geometry must be shared within a native batch.  A family containing one
 geometry per case therefore remains correct, but may train with micro-batch
 size one.
 
-The first release must support:
+The first slice supports:
 
 - explicit input coordinates and output query coordinates;
 - one declared latent regular grid;
 - named point fields and scalar case parameters;
 - geometry-aware train, validation and test partitions;
-- held-out geometry and held-out parameter claims as different evidence;
+- held-out geometry evidence distinguished from ordinary held-out field error;
 - prediction on a new registered geometry without changing field names;
 - exact recording of geometry, neighborhood radii and neighbor-search backend;
 - safe model-state persistence and the ordinary AgentFEM result lifecycle.
+
+The implementation uses the upstream pure-PyTorch neighbor fallback by
+default. Open3D and `torch-scatter` remain disabled until their optional
+dependency combinations pass installed-wheel evidence; selecting them now
+fails before training rather than changing execution silently.
 
 ## Deliberate rejection boundary
 
 Variable point counts are not represented by padding and a mask merely to
 obtain a rectangular NPZ tensor.  Until a case-indexed ragged storage backend
 exists, such families must fail before training with a specific capability
-message.  Mixed spatial dimensions, changing channel semantics, unlabeled
-coordinate systems and silently reordered nodes also fail closed.
+message.  Mixed spatial dimensions, changing channel semantics and unlabeled
+coordinate systems also fail closed. Reordering invariance remains a promotion
+gate rather than an assumed property of a registered family.
 
 The provider must not claim topology generalization solely because coordinates
 change.  Held-out evidence distinguishes at least:
@@ -99,4 +105,3 @@ installed wheel:
   <https://neuraloperator.github.io/dev/modules/generated/neuralop.models.GINO.html>
 - Geometry-Informed Neural Operator:
   <https://doi.org/10.48550/arXiv.2309.00583>
-

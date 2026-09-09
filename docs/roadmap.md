@@ -88,13 +88,17 @@ core `model.step(target=spec, executor=...)` boundary.
   is rejected through disjoint train/validation/test case identities. The
   flagship heat workflow now generates independent fine-grid FEM cases and
   records their transfer error as a separate verification claim.
-- Bind GINO next for coordinate-defined, geometry-varying finite-element
-  families under the [geometry-informed provider
-  contract](gino_provider_contract.md). Begin with fixed-size registered
-  point sets, group native mini-batches by exact geometry identity, and use
-  gradient-accumulated micro-batches for distinct geometries. Add case-indexed
-  ragged storage before claiming variable point counts; do not force irregular
-  meshes through padding merely to use FNO.
+- **Experimental GINO provider implemented:** coordinate-defined registered
+  mesh families use explicit input geometry, latent grid and output queries.
+  Exact geometry groups form native batches; distinct geometries use
+  gradient-accumulated micro-batches. Geometry transforms, radii, neighbor
+  backend, state and held-out geometry evidence follow the ordinary
+  `SimulationResult` lifecycle.
+- Complete GINO promotion with a real varying-geometry FEM case, independent
+  output-query transfer, permutation evidence, physics checks, cold installed-
+  wheel reload and measured CPU/accelerator resource bounds. Add case-indexed
+  ragged storage before claiming variable point counts; never pad irregular
+  meshes merely to use an operator.
 - Add external PDEBench/The Well adapters only as downloaded benchmark
   contracts; do not bundle their large datasets or make them the user API.
 - Do not route neural operators through `NeuralFieldSpec`: a function-to-

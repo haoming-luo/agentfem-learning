@@ -13,14 +13,14 @@ FEM cases -> ScientificFieldDataset -> NeuralOperatorSpec
 
 AgentFEM core owns field meaning, units, geometry policy, case identity,
 partitions, provenance and result evidence. AgentFEM-Learning owns maintained
-framework bindings and training execution. NeuralOperator owns the FNO/TFNO
-architecture and spectral layers. A laboratory-owned model may consume the
+framework bindings and training execution. NeuralOperator owns the
+FNO/TFNO/GINO architectures and numerical layers. A laboratory-owned model may consume the
 same core contracts without using this companion.
 
 ## Current provider
 
-`agentfem-learning.neuraloperator` currently supports FNO and TFNO on fixed,
-structured observation grids. Every field uses the explicit layout
+`agentfem-learning.neuraloperator` supports FNO and TFNO on fixed, structured
+observation grids. Every field uses the explicit layout
 `(case, channel, spatial...)`. Scalar case parameters may be declared in
 `NeuralOperatorSpec.parameter_inputs`; the provider broadcasts them as
 constant channels while preserving their named dataset record.
@@ -76,6 +76,66 @@ The model artifact is loaded with PyTorch's restricted `weights_only` path.
 Provider configuration and scientific metadata are primitive records rather
 than a pickled live Python model.
 
+## Geometry-informed operator
+
+The experimental GINO route learns one operator across a registered family of
+coordinate-defined finite-element fields. Its public data layout is
+`(case, channel, point)` plus coordinate arrays `(case, point, dimension)`:
+
+```python
+operator_spec = learning.NeuralOperatorSpec(
+    architecture="gino",
+    inputs=(load_encoding,),
+    outputs=(response_encoding,),
+    boundary_encoding="explicit point coordinates",
+    required_checks=("held_out_field_error", "geometry_transfer"),
+)
+
+result = model.step(
+    target=operator_spec,
+    dataset=training_dataset,
+    validation_dataset=validation_dataset,
+    test_dataset=unseen_geometry_dataset,
+    input_geometry="nodes",
+    coordinate_system="cartesian",
+    coordinate_unit="m",
+    latent_shape=(16, 16),
+    n_modes=(8, 8),
+    input_radius=0.25,
+    output_radius=0.25,
+).solve_result()
+```
+
+`input_geometry`, the regular `latent_shape`, and optional `output_queries`
+have different meanings and remain separate. Physical coordinates are mapped
+to one training-fitted unit box; the transform, units, neighborhood radii and
+backend are stored with the model. The default `native` neighbor backend is a
+reviewed PyTorch fallback and does not require Open3D or `torch-scatter`.
+
+NeuralOperator currently requires every native batch to share geometry. The
+provider therefore groups exact geometry fingerprints, uses ordinary batches
+inside a group, and accumulates gradients across distinct-geometry
+micro-batches. Every case still carries its own geometry identity and no case
+is padded.
+
+```python
+from agentfem_learning.neural_operators.neuraloperator import load_predictor
+
+predictor = load_predictor("outputs/gino/operator_state.pt")
+fields = predictor.predict(
+    {"load": load_on_new_geometry},
+    input_geometry=new_nodes,
+    output_queries=query_points,
+)
+```
+
+The first provider deliberately requires `registered_mesh_family` field
+semantics and rejects padded or masked point clouds. It supports different
+coordinates across cases, but does not claim unseen topology generalization,
+ragged per-case point counts, or physical validity from training loss alone.
+`geometry_transfer` is emitted only for exact geometries absent from training;
+its stated domain is registered topology deformation.
+
 ## Evidence is not inferred from loss
 
 The generic provider can compute held-out field error. Boundary error,
@@ -106,15 +166,10 @@ test dataset actually changes the spatial resolution. Supplying another
 dataset on the training resolution remains ordinary held-out testing and does
 not satisfy that check.
 
-FNO/TFNO is therefore the first structured-grid route, not a universal finite
-operator. Geometry-varying and unstructured finite-element families should
-use coordinate-aware operators. The next maintained target is GINO, whose
-official formulation maps between arbitrary coordinate meshes and latent
-regular grids. Its implementation boundary is defined in the
-[geometry-informed provider contract](gino_provider_contract.md): the first
-release will group cases by geometry identity and will reject variable-size
-families until case-indexed ragged storage exists. It will not disguise an
-irregular mesh as a padded FNO tensor.
+FNO/TFNO remains the structured-grid route rather than a universal finite
+operator. GINO is the coordinate-aware route under the
+[geometry-informed provider contract](gino_provider_contract.md). Both remain
+experimental until their independent promotion evidence is complete.
 
 ## Storage progression
 
