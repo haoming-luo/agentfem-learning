@@ -67,7 +67,8 @@ def _dataset(scales, *, prefix, point_count=16):
         case_ids=tuple(f"{prefix}-{index:03d}" for index in range(len(scales))),
         encodings=(source_encoding, response_encoding),
         fields={"source": source, "temperature_rise": response},
-        coordinates={"nodes": coordinates},
+        parameters={"geometry_scale": np.asarray(scales)},
+        coordinates={"nodes": coordinates, "queries": coordinates.copy()},
         name="registered_rectangle_family",
         metadata={
             "topology": "registered rectangular point family",
@@ -77,20 +78,64 @@ def _dataset(scales, *, prefix, point_count=16):
     )
 
 
-def _specification(point_count=16):
+def _specification(point_count=16, *, parameter_inputs=()):
     source, response = _encodings(point_count)
     return learning.NeuralOperatorSpec(
         architecture="gino",
         inputs=(source,),
         outputs=(response,),
         boundary_encoding="explicit point coordinates",
+        parameter_inputs=tuple(parameter_inputs),
         required_checks=("held_out_field_error", "geometry_transfer"),
+    )
+
+
+def _query_dataset(scales, *, prefix, output_side=5):
+    dataset = _dataset(scales, prefix=prefix)
+    base = np.stack(
+        np.meshgrid(
+            np.linspace(0.0, 1.0, output_side),
+            np.linspace(0.0, 1.0, output_side),
+            indexing="ij",
+        ),
+        axis=-1,
+    ).reshape(-1, 2)
+    queries = np.asarray(
+        [base * np.asarray([float(scale), 2.0 - 0.25 * float(scale)]) for scale in scales]
+    )
+    response = np.asarray(
+        [
+            (
+                2.0
+                * np.sin(np.pi * points[:, 0] / scale)
+                * np.sin(np.pi * points[:, 1] / (2.0 - 0.25 * scale))
+            )[None, :]
+            for scale, points in zip(scales, queries, strict=True)
+        ]
+    )
+    source_encoding = dataset.encodings[0]
+    response_encoding = learning.FieldEncoding(
+        name="temperature_rise",
+        role="output",
+        unit="K",
+        representation="point_samples",
+        shape=(1, output_side**2),
+        mesh_policy="registered_mesh_family",
+    )
+    return datasets.ScientificFieldDataset(
+        case_ids=dataset.case_ids,
+        encodings=(source_encoding, response_encoding),
+        fields={"source": dataset.fields["source"], "temperature_rise": response},
+        coordinates={"nodes": dataset.coordinates["nodes"], "queries": queries},
+        name="independent_output_query_family",
+        metadata=dataset.metadata,
     )
 
 
 def _options(**updates):
     values = {
         "input_geometry": "nodes",
+        "output_queries": "queries",
         "latent_shape": (4, 4),
         "n_modes": (2, 2),
         "hidden_channels": 4,
@@ -112,7 +157,7 @@ def test_gino_trains_across_registered_geometries_and_reloads(tmp_path):
     _activate_extension()
     training = _dataset([0.8, 0.9, 1.0, 1.1], prefix="train")
     validation = _dataset([0.85, 1.05], prefix="validation")
-    test = _dataset([0.95, 1.15], prefix="geometry-test")
+    test = _query_dataset([1.0], prefix="query-test")
     specification = _specification()
     output = tmp_path / "gino"
     model = models.create(
@@ -125,6 +170,7 @@ def test_gino_trains_across_registered_geometries_and_reloads(tmp_path):
         validation_dataset=validation,
         test_dataset=test,
         input_geometry="nodes",
+        output_queries="queries",
         latent_shape=(4, 4),
         n_modes=(2, 2),
         hidden_channels=4,
@@ -144,10 +190,12 @@ def test_gino_trains_across_registered_geometries_and_reloads(tmp_path):
     assert result.metadata["geometry"]["batching"].startswith("exact_geometry_groups")
     assert result.quantity("training_geometry_count") == 4.0
     assert result.quantity("validation_geometry_count") == 2.0
-    assert result.quantity("geometry_transfer_relative_l2_error") >= 0.0
+    assert result.quantity("validation_relative_l2_error") >= 0.0
+    assert result.quantity("output_query_transfer_relative_l2_error") >= 0.0
     assert {claim.name for claim in result.verification.claims} == {
         "held_out_field_error",
         "geometry_transfer",
+        "output_query_transfer",
     }
     assert provenance.verify_manifest(output / "result.json").verified is True
     manifest = json.loads((output / "result.json").read_text(encoding="utf-8"))
@@ -160,14 +208,28 @@ def test_gino_trains_across_registered_geometries_and_reloads(tmp_path):
     predicted = predictor.predict(
         {"source": validation.fields["source"]},
         input_geometry=validation.coordinates["nodes"],
+        output_queries=validation.coordinates["queries"],
     )
     assert predicted["temperature_rise"].shape == (2, 1, 16)
     assert np.isfinite(predicted["temperature_rise"]).all()
 
+    input_permutation = np.arange(16)[::-1]
+    output_permutation = np.roll(np.arange(16), 5)
+    permuted = predictor.predict(
+        {"source": validation.fields["source"][:, :, input_permutation]},
+        input_geometry=validation.coordinates["nodes"][:, input_permutation, :],
+        output_queries=validation.coordinates["queries"][:, output_permutation, :],
+    )["temperature_rise"]
+    restored = np.empty_like(permuted)
+    restored[:, :, output_permutation] = permuted
+    assert restored == pytest.approx(predicted["temperature_rise"], abs=2.0e-5)
+
 
 def test_gino_native_geometry_batch_and_fail_closed_contracts():
     dataset = _dataset([1.0] * 6, prefix="shared")
-    outcome = train_gino(_specification(), dataset, _options())
+    outcome = train_gino(
+        _specification(parameter_inputs=("geometry_scale",)), dataset, _options()
+    )
     assert outcome.metrics["training_geometry_count"] == 1.0
     assert outcome.geometry_transfer is False
 

@@ -184,6 +184,7 @@ class GINOOutcome:
     validation_dataset: object
     test_case_ids: tuple[str, ...] = ()
     geometry_transfer: bool = False
+    output_query_transfer: bool = False
 
     def write(self, path: str | Path, *, specification, dataset) -> dict[str, Path]:
         import torch
@@ -438,6 +439,7 @@ def train_gino(
         "gno_coord_dim": coordinate_dimension,
         "in_gno_radius": options.input_radius,
         "out_gno_radius": options.output_radius,
+        "fno_in_channels": int(x_train.shape[-1]),
         "fno_n_modes": options.n_modes,
         "fno_hidden_channels": options.hidden_channels,
         "fno_n_layers": options.n_layers,
@@ -568,16 +570,15 @@ def train_gino(
         device=device,
         prefix="validation",
     )
-    train_fingerprints = set(_geometry_groups(input_train, output_train))
+    train_fingerprints = set(_coordinate_fingerprints(input_train))
     validation_fingerprints = set(
-        _geometry_groups(
-            transform.normalize(input_validation), transform.normalize(output_validation)
-        )
+        _coordinate_fingerprints(transform.normalize(input_validation))
     )
     geometry_transfer = bool(validation_fingerprints - train_fingerprints) and not bool(
         validation_fingerprints.intersection(train_fingerprints)
     )
     test_case_ids: tuple[str, ...] = ()
+    output_query_transfer = False
     if test_dataset is not None:
         _, _, test_metrics = _evaluate_dataset(
             model,
@@ -593,10 +594,19 @@ def train_gino(
         metrics.update(test_metrics)
         test_case_ids = test_dataset.case_ids
         assert test_geometry is not None
-        test_fingerprints = set(_geometry_groups(*test_geometry))
+        test_fingerprints = set(_coordinate_fingerprints(test_geometry[0]))
         if not test_fingerprints.intersection(train_fingerprints):
             geometry_transfer = True
             metrics["geometry_transfer_relative_l2_error"] = metrics["test_relative_l2_error"]
+        train_geometry_pairs = set(_geometry_groups(input_train, output_train))
+        test_geometry_pairs = set(_geometry_groups(*test_geometry))
+        output_query_transfer = test_fingerprints.issubset(train_fingerprints) and bool(
+            test_geometry_pairs - train_geometry_pairs
+        )
+        if output_query_transfer:
+            metrics["output_query_transfer_relative_l2_error"] = metrics[
+                "test_relative_l2_error"
+            ]
     metrics.update(
         {
             "training_geometry_count": float(len(train_fingerprints)),
@@ -636,6 +646,7 @@ def train_gino(
         validation_dataset=validation,
         test_case_ids=test_case_ids,
         geometry_transfer=geometry_transfer,
+        output_query_transfer=output_query_transfer,
     )
 
 
@@ -834,6 +845,17 @@ def _geometry_groups(input_geometry, output_queries):
             digest.update(contiguous.tobytes())
         groups[digest.hexdigest()].append(index)
     return dict(groups)
+
+
+def _coordinate_fingerprints(coordinates) -> tuple[str, ...]:
+    fingerprints = []
+    for values in coordinates:
+        contiguous = np.ascontiguousarray(values, dtype=np.float64)
+        digest = hashlib.sha256()
+        digest.update(str(contiguous.shape).encode("ascii"))
+        digest.update(contiguous.tobytes())
+        fingerprints.append(digest.hexdigest())
+    return tuple(fingerprints)
 
 
 def _broadcast_coordinates(values: np.ndarray, case_count: int) -> np.ndarray:

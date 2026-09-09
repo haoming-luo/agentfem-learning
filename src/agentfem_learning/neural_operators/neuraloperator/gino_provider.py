@@ -13,7 +13,11 @@ from agentfem_learning import __version__
 from .checks import OperatorCheck, OperatorCheckContext
 from .gino import GINOTrainingOptions, train_gino
 
-_PROVIDER_CHECKS = {"held_out_field_error", "geometry_transfer"}
+_PROVIDER_CHECKS = {
+    "held_out_field_error",
+    "geometry_transfer",
+    "output_query_transfer",
+}
 
 
 class GINOStep:
@@ -72,6 +76,8 @@ class GINOStep:
         implemented = {"held_out_field_error"}
         if outcome.geometry_transfer:
             implemented.add("geometry_transfer")
+        if outcome.output_query_transfer:
+            implemented.add("output_query_transfer")
         implemented.update(check.name for check in self.check_evaluators)
         missing = tuple(
             item for item in self.specification.required_checks if item not in implemented
@@ -154,6 +160,8 @@ class GINOStep:
         claims = [_held_out_claim(outcome.metrics, self.options)]
         if outcome.geometry_transfer:
             claims.append(_geometry_transfer_claim(outcome.metrics, self.options))
+        if outcome.output_query_transfer:
+            claims.append(_output_query_transfer_claim(outcome.metrics, self.options))
         claims.extend(custom_claims)
         claims.extend(_inconclusive_claim(item) for item in missing)
         result.add_verification(
@@ -195,10 +203,10 @@ def _geometry_transfer_claim(metrics, options):
         observable=metric,
         actual=float(metrics[metric]),
         expected=0.0,
-        reference="cases whose exact geometry fingerprints are absent from training",
+        reference="cases whose exact input-geometry fingerprints are absent from training",
         absolute_tolerance=options.relative_l2_tolerance,
         validity_domain="registered topology deformations; not a new-topology claim",
-        evidence={"geometry_identity": "exact input/output coordinate fingerprint"},
+        evidence={"geometry_identity": "exact input-coordinate fingerprint"},
     )
 
 
@@ -212,6 +220,19 @@ def _inconclusive_claim(name):
         kind="verification",
         validity_domain="not inferred from supervised loss",
         message="GINO does not convert optimization loss into a physical claim.",
+    )
+
+
+def _output_query_transfer_claim(metrics, options):
+    return verification.VerificationClaim.compare(
+        name="output_query_transfer",
+        observable="output_query_transfer_relative_l2_error",
+        actual=float(metrics["output_query_transfer_relative_l2_error"]),
+        expected=0.0,
+        reference="independent test cases evaluated at a changed output-query set",
+        absolute_tolerance=options.relative_l2_tolerance,
+        validity_domain="declared coordinate bounds and registered field semantics",
+        evidence={"metric": "global relative L2 at independent output queries"},
     )
 
 

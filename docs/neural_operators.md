@@ -88,7 +88,11 @@ operator_spec = learning.NeuralOperatorSpec(
     inputs=(load_encoding,),
     outputs=(response_encoding,),
     boundary_encoding="explicit point coordinates",
-    required_checks=("held_out_field_error", "geometry_transfer"),
+    required_checks=(
+        "held_out_field_error",
+        "geometry_transfer",
+        "output_query_transfer",
+    ),
 )
 
 result = model.step(
@@ -134,7 +138,10 @@ semantics and rejects padded or masked point clouds. It supports different
 coordinates across cases, but does not claim unseen topology generalization,
 ragged per-case point counts, or physical validity from training loss alone.
 `geometry_transfer` is emitted only for exact geometries absent from training;
-its stated domain is registered topology deformation.
+its stated domain is registered topology deformation. A changed independent
+output query set is reported separately as `output_query_transfer` only when
+the corresponding input geometry occurred in training. Thus a finer query grid
+is neither mislabeled as a new physical geometry nor confounded with one.
 
 ## Evidence is not inferred from loss
 

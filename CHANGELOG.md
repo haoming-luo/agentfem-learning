@@ -20,7 +20,8 @@
 - Implement the official NeuralOperator GINO provider with distinct input,
   latent and output geometries; exact-geometry native batches; cross-geometry
   gradient accumulation; training-fitted coordinate transforms; graph-neighbor
-  coverage checks; safe reload; and separate geometry-transfer evidence.
+  coverage checks; safe reload; and separate geometry- and output-query-transfer
+  evidence.
 - Add a real varying-width AgentFEM heat-transfer example. Keep new topology,
   ragged point families and optional accelerated neighbor backends outside the
   first validated boundary.

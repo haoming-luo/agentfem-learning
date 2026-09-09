@@ -50,6 +50,7 @@ The first slice supports:
 - named point fields and scalar case parameters;
 - geometry-aware train, validation and test partitions;
 - held-out geometry evidence distinguished from ordinary held-out field error;
+- output-query transfer isolated on input geometries already present in training;
 - prediction on a new registered geometry without changing field names;
 - exact recording of geometry, neighborhood radii and neighbor-search backend;
 - safe model-state persistence and the ordinary AgentFEM result lifecycle.
