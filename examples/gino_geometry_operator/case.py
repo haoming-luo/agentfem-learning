@@ -227,7 +227,7 @@ def main():
         prefix="validation",
     )
     query_test, _, _ = build_dataset(
-        (0.95,),
+        (1.0,) if arguments.smoke else (0.95,),
         (1.25e5,),
         input_shape=input_shape,
         output_shape=test_output_shape,
