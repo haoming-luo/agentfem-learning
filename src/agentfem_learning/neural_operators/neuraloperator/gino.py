@@ -36,6 +36,8 @@ class GINOTrainingOptions:
     n_layers: int = 4
     input_radius: float = 0.25
     output_radius: float = 0.25
+    output_weighting_function: str | None = None
+    output_weighting_scale: float = 1.0
     epochs: int = 100
     batch_size: int = 8
     learning_rate: float = 1.0e-3
@@ -64,6 +66,20 @@ class GINOTrainingOptions:
             raise ValueError("hidden_channels and n_layers must be positive.")
         if self.input_radius <= 0.0 or self.output_radius <= 0.0:
             raise ValueError("GINO neighborhood radii must be positive.")
+        weighting = (
+            None
+            if self.output_weighting_function is None
+            else str(self.output_weighting_function).strip().lower()
+        )
+        supported_weighting = {"bump", "half_cos", "quadr", "quartic", "octic"}
+        if weighting not in {None, *supported_weighting}:
+            raise ValueError(
+                "output_weighting_function must be one of "
+                f"{tuple(sorted(supported_weighting))!r} or None."
+            )
+        weighting_scale = float(self.output_weighting_scale)
+        if not np.isfinite(weighting_scale) or weighting_scale <= 0.0:
+            raise ValueError("output_weighting_scale must be finite and positive.")
         if self.epochs < 1 or self.batch_size < 1 or self.patience < 1:
             raise ValueError("epochs, batch_size, and patience must be positive.")
         if self.learning_rate <= 0.0 or self.weight_decay < 0.0:
@@ -106,6 +122,8 @@ class GINOTrainingOptions:
         object.__setattr__(self, "coordinate_bounds", bounds)
         object.__setattr__(self, "input_geometry", input_geometry)
         object.__setattr__(self, "output_queries", output_queries)
+        object.__setattr__(self, "output_weighting_function", weighting)
+        object.__setattr__(self, "output_weighting_scale", weighting_scale)
         object.__setattr__(self, "coordinate_system", coordinate_system)
         object.__setattr__(self, "coordinate_unit", coordinate_unit)
 
@@ -439,6 +457,8 @@ def train_gino(
         "gno_coord_dim": coordinate_dimension,
         "in_gno_radius": options.input_radius,
         "out_gno_radius": options.output_radius,
+        "gno_weighting_function": options.output_weighting_function,
+        "gno_weight_function_scale": options.output_weighting_scale,
         "fno_in_channels": int(x_train.shape[-1]),
         "fno_n_modes": options.n_modes,
         "fno_hidden_channels": options.hidden_channels,
@@ -642,6 +662,8 @@ def train_gino(
         "latent_shape": options.latent_shape,
         "input_radius": options.input_radius,
         "output_radius": options.output_radius,
+        "output_weighting_function": options.output_weighting_function,
+        "output_weighting_scale": options.output_weighting_scale,
         "neighbor_backend": options.neighbor_backend,
         "batching": "exact_geometry_groups_with_gradient_accumulation",
         "variable_point_count": False,

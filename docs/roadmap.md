@@ -102,6 +102,9 @@ core `model.step(target=spec, executor=...)` boundary.
   as quantities, so easy geometries cannot conceal a failed held-out case.
   Every GINO result also carries a deterministic input/output point-permutation
   claim, rather than leaving point-order independence as a test-only property.
+  Failed path evidence can now be reduced to a bounded, diverse refinement
+  plan for new reference-solver samples; dataset mutation and retraining remain
+  explicit project actions.
   This closes the evidence protocol exposed by the perforated-plate radius
   audit; it does not by itself improve a trained model or promote GINO.
 - Complete GINO promotion with a real varying-geometry FEM case, independent

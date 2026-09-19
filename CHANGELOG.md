@@ -33,6 +33,10 @@
   error and add aggregate, median, 95th-percentile, and per-output metrics.
 - Record deterministic input-point and output-query permutation equivariance
   as a provider-owned verification claim in every GINO result.
+- Expose NeuralOperator's maintained compact-support output-GNO weighting
+  functions with validated, persisted provider options.
+- Add evidence-driven parameter-path refinement plans that select a bounded,
+  diverse set of high-risk cases for new trusted-solver evaluations.
 
 - Add the independent AgentFEM extension entry point.
 - Add a provider-neutral Mode-III `NeuralFieldSpec`.

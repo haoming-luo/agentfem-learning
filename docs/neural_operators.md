@@ -208,6 +208,42 @@ acceptance value is the maximum per-case relative L2 error.  The global,
 median-case, 95th-percentile, and per-output errors remain available as result
 quantities, so many easy geometries cannot hide one failed held-out geometry.
 
+For geometry paths that are sensitive to the hard output-neighborhood cutoff,
+the provider exposes the compact-support kernels maintained by NeuralOperator:
+
+```python
+model.step(
+    target=operator_spec,
+    dataset=training_dataset,
+    output_weighting_function="half_cos",
+    output_weighting_scale=1.0,
+)
+```
+
+This changes only the output GNO quadrature weighting. It must be selected by
+held-out and path evidence; AgentFEM-Learning does not silently change the
+architecture after seeing validation results.
+
+When a path fails, the same evidence can produce a bounded simulator-sampling
+plan:
+
+```python
+from agentfem_learning.neural_operators.neuraloperator import (
+    parameter_path_refinement_plan,
+)
+
+plan = parameter_path_refinement_plan(
+    path_claim,
+    existing_values=training_dataset.parameters["hole_radius"],
+    maximum_candidates=3,
+)
+```
+
+The plan balances measured field risk with distance from existing samples. It
+does not synthesize labels or mutate the dataset: the project evaluates those
+parameters with AgentFEM or another declared reference solver, appends the new
+cases, and reruns the same independent path check.
+
 FNO/TFNO remains the structured-grid route rather than a universal finite
 operator. GINO is the coordinate-aware route under the
 [geometry-informed provider contract](gino_provider_contract.md). Both remain

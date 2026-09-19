@@ -10,6 +10,8 @@ from .api import (
 from .checks import (
     OperatorCheck,
     OperatorCheckContext,
+    ParameterPathRefinementPlan,
+    parameter_path_refinement_plan,
     parameter_path_reliability_check,
 )
 from .gino import (
@@ -35,8 +37,10 @@ __all__ = [
     "NeuralOperatorTrainingOptions",
     "OperatorCheck",
     "OperatorCheckContext",
+    "ParameterPathRefinementPlan",
     "load_gino_predictor",
     "load_predictor",
+    "parameter_path_refinement_plan",
     "parameter_path_reliability_check",
     "train_gino",
     "train_operator",

@@ -60,6 +60,13 @@ default. Open3D and `torch-scatter` remain disabled until their optional
 dependency combinations pass installed-wheel evidence; selecting them now
 fails before training rather than changing execution silently.
 
+The output GNO may use NeuralOperator's maintained compact-support weighting
+functions through `output_weighting_function`. Supported values are `bump`,
+`half_cos`, `quadr`, `quartic`, and `octic`; `None` preserves the unweighted
+upstream path. The selected function and scale are part of the saved model and
+geometry configuration. They are explicit numerical choices, not an automatic
+accuracy claim.
+
 Every training result also checks point-order semantics. It reverses input
 points, cyclically permutes output queries, restores the output order, and
 records `permutation_equivariance` as an ordinary verification claim. This

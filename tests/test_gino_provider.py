@@ -11,6 +11,7 @@ from agentfem.step_providers import step_providers
 from agentfem_learning.neural_operators.neuraloperator import (
     GINOTrainingOptions,
     load_predictor,
+    parameter_path_refinement_plan,
     parameter_path_reliability_check,
     train_gino,
 )
@@ -216,6 +217,36 @@ def test_parameter_path_check_fails_closed_for_duplicate_coordinates():
         check.evaluate(context)
 
 
+def test_parameter_path_refinement_selects_diverse_failed_cases():
+    check = parameter_path_reliability_check(
+        "hole_radius",
+        output_tolerances={"stress": 0.05},
+        maximum_spike_ratio=2.0,
+    )
+    claim = check.evaluate(_parameter_path_context([0.01, 0.04, 0.10, 0.06, 0.01]))
+
+    plan = parameter_path_refinement_plan(
+        claim,
+        existing_values=(0.1, 0.5),
+        maximum_candidates=2,
+    )
+
+    assert plan.values[0] == pytest.approx(0.3)
+    assert len(plan.values) == 2
+    assert all(value not in {0.1, 0.5} for value in plan.values)
+    assert plan.summary()["kind"] == "parameter_path_refinement_plan"
+
+
+def test_parameter_path_refinement_is_empty_after_acceptance():
+    check = parameter_path_reliability_check("hole_radius", maximum_relative_l2=0.20)
+    claim = check.evaluate(_parameter_path_context([0.01, 0.02, 0.03]))
+
+    plan = parameter_path_refinement_plan(claim)
+
+    assert plan.values == ()
+    assert plan.reason == "path_claim_not_failed"
+
+
 def test_parameter_path_check_enters_gino_result_lifecycle(tmp_path):
     _activate_extension()
     training = _dataset([0.8, 1.0, 1.2], prefix="train-path")
@@ -382,6 +413,21 @@ def test_gino_native_geometry_batch_and_fail_closed_contracts():
 
     with pytest.raises(ValueError, match="neighbor_backend='native'"):
         GINOTrainingOptions(neighbor_backend="open3d")
+
+    with pytest.raises(ValueError, match="output_weighting_function"):
+        GINOTrainingOptions(output_weighting_function="gaussian")
+
+    weighted = train_gino(
+        _specification(parameter_inputs=("geometry_scale",)),
+        dataset,
+        _options(
+            epochs=1,
+            output_weighting_function="half_cos",
+            output_weighting_scale=0.75,
+        ),
+    )
+    assert weighted.model_configuration["gno_weighting_function"] == "half_cos"
+    assert weighted.geometry_configuration["output_weighting_scale"] == 0.75
 
     missing_coordinates = datasets.ScientificFieldDataset(
         case_ids=dataset.case_ids,

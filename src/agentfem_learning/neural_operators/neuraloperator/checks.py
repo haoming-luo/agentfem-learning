@@ -70,6 +70,29 @@ class OperatorCheck:
         }
 
 
+@dataclass(frozen=True)
+class ParameterPathRefinementPlan:
+    """Bounded candidate set selected from failed independent path evidence."""
+
+    parameter: str
+    values: tuple[float, ...]
+    case_ids: tuple[str, ...]
+    risks: tuple[float, ...]
+    strategy: str = "risk_diversity"
+    reason: str = "failed_path_evidence"
+
+    def summary(self) -> dict[str, object]:
+        return {
+            "kind": "parameter_path_refinement_plan",
+            "parameter": self.parameter,
+            "values": self.values,
+            "case_ids": self.case_ids,
+            "risks": self.risks,
+            "strategy": self.strategy,
+            "reason": self.reason,
+        }
+
+
 def _callable_identity(function) -> dict[str, object]:
     identity = {
         "module": getattr(function, "__module__", None),
@@ -247,8 +270,92 @@ def parameter_path_reliability_check(
     )
 
 
+def parameter_path_refinement_plan(
+    claim: verification.VerificationClaim,
+    *,
+    existing_values=(),
+    maximum_candidates: int = 3,
+    minimum_spacing: float = 0.0,
+) -> ParameterPathRefinementPlan:
+    """Select diverse high-risk samples from a failed parameter-path claim.
+
+    The function does not generate fields, mutate a dataset, or retrain a
+    model. It translates independent failure evidence into a bounded set of
+    parameter values that a project can evaluate with its trusted simulator.
+    """
+
+    count = int(maximum_candidates)
+    spacing = float(minimum_spacing)
+    if count < 1:
+        raise ValueError("maximum_candidates must be positive.")
+    if not np.isfinite(spacing) or spacing < 0.0:
+        raise ValueError("minimum_spacing must be finite and non-negative.")
+    evidence = dict(getattr(claim, "evidence", {}) or {})
+    required = {"parameter", "parameter_values", "case_ids", "case_risk"}
+    missing = required.difference(evidence)
+    if missing:
+        raise ValueError(
+            f"Refinement requires parameter-path evidence; missing {tuple(sorted(missing))!r}."
+        )
+    parameter = str(evidence["parameter"])
+    values = np.asarray(evidence["parameter_values"], dtype=float).reshape(-1)
+    risks = np.asarray(evidence["case_risk"], dtype=float).reshape(-1)
+    case_ids = tuple(str(item) for item in evidence["case_ids"])
+    if values.size != risks.size or len(case_ids) != values.size:
+        raise ValueError("Parameter-path values, risks, and case IDs must align.")
+    if not np.isfinite(values).all() or not np.isfinite(risks).all():
+        raise ValueError("Parameter-path refinement evidence must be finite.")
+    if getattr(claim, "status", None) != "failed":
+        return ParameterPathRefinementPlan(
+            parameter=parameter,
+            values=(),
+            case_ids=(),
+            risks=(),
+            reason="path_claim_not_failed",
+        )
+
+    existing = np.asarray(tuple(existing_values), dtype=float).reshape(-1)
+    if existing.size and not np.isfinite(existing).all():
+        raise ValueError("existing_values must be finite.")
+    span = max(float(np.ptp(values)), np.finfo(float).eps)
+    tolerance = max(spacing, 64.0 * np.finfo(float).eps * max(np.max(np.abs(values)), 1.0))
+    remaining = [
+        index
+        for index, value in enumerate(values)
+        if not existing.size or float(np.min(np.abs(existing - value))) > tolerance
+    ]
+    selected = []
+    anchors = list(existing)
+    while remaining and len(selected) < count:
+        scores = []
+        for index in remaining:
+            if anchors:
+                distance = min(abs(float(values[index]) - float(item)) for item in anchors)
+            else:
+                distance = span
+            diversity = min(distance / span, 1.0)
+            scores.append(float(risks[index]) * np.sqrt(max(diversity, 0.05)))
+        chosen_offset = int(np.argmax(scores))
+        chosen = remaining.pop(chosen_offset)
+        selected.append(chosen)
+        anchors.append(float(values[chosen]))
+        remaining = [
+            index
+            for index in remaining
+            if abs(float(values[index]) - float(values[chosen])) > tolerance
+        ]
+    return ParameterPathRefinementPlan(
+        parameter=parameter,
+        values=tuple(float(values[index]) for index in selected),
+        case_ids=tuple(case_ids[index] for index in selected),
+        risks=tuple(float(risks[index]) for index in selected),
+    )
+
+
 __all__ = [
     "OperatorCheck",
     "OperatorCheckContext",
+    "ParameterPathRefinementPlan",
+    "parameter_path_refinement_plan",
     "parameter_path_reliability_check",
 ]
