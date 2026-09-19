@@ -277,6 +277,47 @@ their dataset can enter through `merge_operator_datasets(...)`. Retraining
 remains the ordinary `model.step(...)` workflow rather than a second hidden
 trainer.
 
+For genuinely new cases, keep acquisition separate from promotion:
+
+```python
+from agentfem import campaigns
+from agentfem_learning.neural_operators import merge_parameter_path_acquisition
+from agentfem_learning.neural_operators.neuraloperator import (
+    parameter_path_acquisition_plan,
+)
+
+acquisition = parameter_path_acquisition_plan(
+    path_claim,
+    existing_values=training_dataset.parameters["hole_radius"],
+    maximum_candidates=2,
+)
+space = campaigns.ParameterSpace.create(
+    campaigns.RealParameter("hole_radius", 0.10, 0.25, unit="m")
+)
+sampling = acquisition.sampling_plan(space)
+
+# AgentFEM Campaign evaluates ``sampling``. A project adapter converts its
+# successful high-fidelity fields to ``acquired_dataset``.
+merged = merge_parameter_path_acquisition(
+    training_dataset,
+    acquired_dataset,
+    acquisition,
+)
+```
+
+The acquisition plan inserts high-risk interval midpoints rather than
+relabelling predictions as truth. It lowers to AgentFEM's existing explicit
+`SamplingPlan`, so case identity, resume, execution evidence and failure
+handling remain owned by Campaign. The returned field dataset must match every
+requested parameter value before it can be merged.
+
+Independent-seed predictions can also be reduced to a provider-neutral risk
+signal with `operator_ensemble_disagreement(...)`. It reports normalized
+per-case field disagreement and can rank an unlabelled candidate pool through
+`parameter_candidate_acquisition_plan(...)`. This is deliberately an
+epistemic-disagreement proxy, not a calibrated uncertainty interval: small
+ensemble spread does not prove that a field is physically accurate.
+
 FNO/TFNO remains the structured-grid route rather than a universal finite
 operator. GINO is the coordinate-aware route under the
 [geometry-informed provider contract](gino_provider_contract.md). Both remain
@@ -298,6 +339,12 @@ not alter field semantics or trainer code.
   <https://doi.org/10.48550/arXiv.2010.08895>
 - Geometry-Informed Neural Operator:
   <https://doi.org/10.48550/arXiv.2309.00583>
+- Deep ensembles for predictive uncertainty:
+  <https://proceedings.neurips.cc/paper/2017/hash/9ef2ed4b7fd2c810847ffa5fa85bce38-Abstract.html>
+- Multi-resolution active learning of Fourier neural operators:
+  <https://proceedings.mlr.press/v238/li24k.html>
+- Active learning with selective PDE time-step acquisition:
+  <https://proceedings.mlr.press/v267/kim25m.html>
 - Zarr chunked array specification: <https://zarr.dev/>
 - PDEBench: <https://github.com/pdebench/PDEBench>
 - The Well: <https://github.com/PolymathicAI/the_well>

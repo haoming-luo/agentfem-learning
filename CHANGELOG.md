@@ -48,6 +48,13 @@
   cases move into training, leave the validation path, preserve a minimum
   independent audit set, and retain before/after dataset fingerprints before
   the ordinary provider retrains the model.
+- Add a distinct high-fidelity acquisition transaction for cases that have not
+  yet been computed: failed path evidence proposes bounded interval midpoints,
+  lowers them to AgentFEM Campaign sampling, and verifies returned parameter
+  values before merging new scientific fields.
+- Add provider-neutral independent-seed field disagreement as an acquisition
+  risk signal, while explicitly refusing to present ensemble spread as a
+  calibrated physical error bound.
 
 - Add the independent AgentFEM extension entry point.
 - Add a provider-neutral Mode-III `NeuralFieldSpec`.

@@ -6,11 +6,16 @@ import inspect
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from hashlib import sha256
+from itertools import pairwise
 
 import numpy as np
 from agentfem import verification
 
-from ..refinement import ParameterPathRefinementPlan
+from ..refinement import (
+    ParameterPathAcquisitionPlan,
+    ParameterPathRefinementPlan,
+    parameter_candidate_acquisition_plan,
+)
 
 
 @dataclass(frozen=True)
@@ -331,10 +336,75 @@ def parameter_path_refinement_plan(
     )
 
 
+def parameter_path_acquisition_plan(
+    claim: verification.VerificationClaim,
+    *,
+    existing_values=(),
+    maximum_candidates: int = 3,
+    minimum_spacing: float = 0.0,
+) -> ParameterPathAcquisitionPlan:
+    """Propose new interval midpoints around failed independent path evidence.
+
+    Unlike :func:`parameter_path_refinement_plan`, this function never promotes
+    an already labelled validation case.  It proposes previously unevaluated
+    values between adjacent path samples; AgentFEM Campaign can then compute
+    their trusted fields before an explicit dataset merge.
+    """
+
+    evidence = dict(getattr(claim, "evidence", {}) or {})
+    required = {"parameter", "parameter_values", "case_risk"}
+    missing = required.difference(evidence)
+    if missing:
+        raise ValueError(
+            f"Acquisition requires parameter-path evidence; missing {tuple(sorted(missing))!r}."
+        )
+    parameter = str(evidence["parameter"])
+    values = np.asarray(evidence["parameter_values"], dtype=float).reshape(-1)
+    risks = np.asarray(evidence["case_risk"], dtype=float).reshape(-1)
+    if values.size != risks.size or values.size < 2:
+        raise ValueError("Parameter-path acquisition requires aligned adjacent samples.")
+    if not np.isfinite(values).all() or not np.isfinite(risks).all():
+        raise ValueError("Parameter-path acquisition evidence must be finite.")
+    if np.any(np.diff(values) <= 0.0):
+        raise ValueError("Parameter-path acquisition values must be strictly increasing.")
+    if getattr(claim, "status", None) != "failed":
+        return ParameterPathAcquisitionPlan(
+            parameter=parameter,
+            values=(),
+            scores=(),
+            strategy="failed_path_interval_midpoints",
+            reason="path_claim_not_failed",
+            source_claim=getattr(claim, "name", None),
+        )
+
+    intervals = tuple((float(left), float(right)) for left, right in pairwise(values))
+    candidates = 0.5 * (values[:-1] + values[1:])
+    interval_width = np.diff(values)
+    span = max(float(np.ptp(values)), np.finfo(float).eps)
+    interval_risk = np.maximum(risks[:-1], risks[1:]) * np.sqrt(interval_width / span)
+    observed = np.concatenate(
+        (values, np.asarray(tuple(existing_values), dtype=float).reshape(-1))
+    )
+    return parameter_candidate_acquisition_plan(
+        parameter,
+        candidates,
+        interval_risk,
+        existing_values=observed,
+        maximum_candidates=maximum_candidates,
+        minimum_spacing=minimum_spacing,
+        source_intervals=intervals,
+        strategy="failed_path_interval_midpoints",
+        reason="failed_independent_path_evidence",
+        source_claim=getattr(claim, "name", None),
+    )
+
+
 __all__ = [
     "OperatorCheck",
     "OperatorCheckContext",
+    "ParameterPathAcquisitionPlan",
     "ParameterPathRefinementPlan",
+    "parameter_path_acquisition_plan",
     "parameter_path_refinement_plan",
     "parameter_path_reliability_check",
 ]

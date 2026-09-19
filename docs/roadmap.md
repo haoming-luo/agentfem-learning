@@ -109,6 +109,14 @@ core `model.step(target=spec, executor=...)` boundary.
   fingerprints. Retraining remains an explicit ordinary Step action.
   This closes the first evidence-driven refinement loop exposed by the
   perforated-plate radius audit; it does not by itself promote GINO.
+- **High-fidelity acquisition loop implemented:** failed independent path
+  evidence can now propose new interval-midpoint cases rather than only
+  promoting already computed validation fields. Plans are fingerprinted and
+  lower directly to AgentFEM `SamplingPlan`, while acquired fields must match
+  the plan before merging. Independent-seed field disagreement is available
+  as an architecture-neutral candidate risk signal, explicitly not as a
+  calibrated error bar. A project-specific adapter still owns the conversion
+  from successful Campaign fields to its declared scientific dataset schema.
 - Complete GINO promotion with a real varying-geometry FEM case, independent
   output-query transfer, physics checks, cold installed-
   wheel reload and measured CPU/accelerator resource bounds. Add case-indexed

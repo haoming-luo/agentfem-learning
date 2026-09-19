@@ -10,7 +10,9 @@ from .api import (
 from .checks import (
     OperatorCheck,
     OperatorCheckContext,
+    ParameterPathAcquisitionPlan,
     ParameterPathRefinementPlan,
+    parameter_path_acquisition_plan,
     parameter_path_refinement_plan,
     parameter_path_reliability_check,
 )
@@ -37,9 +39,11 @@ __all__ = [
     "NeuralOperatorTrainingOptions",
     "OperatorCheck",
     "OperatorCheckContext",
+    "ParameterPathAcquisitionPlan",
     "ParameterPathRefinementPlan",
     "load_gino_predictor",
     "load_predictor",
+    "parameter_path_acquisition_plan",
     "parameter_path_refinement_plan",
     "parameter_path_reliability_check",
     "train_gino",
