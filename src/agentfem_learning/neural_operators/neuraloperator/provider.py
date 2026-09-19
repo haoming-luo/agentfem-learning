@@ -12,8 +12,13 @@ from agentfem_learning import __version__
 
 from .api import NeuralOperatorTrainingOptions, train_operator
 from .checks import OperatorCheck, OperatorCheckContext
+from .data_claims import operator_dataset_integrity_claim
 
-_IMPLEMENTED_CHECKS = {"held_out_field_error", "resolution_transfer"}
+_IMPLEMENTED_CHECKS = {
+    "held_out_field_error",
+    "resolution_transfer",
+    "operator_dataset_integrity",
+}
 
 
 class NeuralOperatorStep:
@@ -69,7 +74,7 @@ class NeuralOperatorStep:
             )
             for check in self.check_evaluators
         )
-        implemented_checks = {"held_out_field_error"}
+        implemented_checks = {"held_out_field_error", "operator_dataset_integrity"}
         if outcome.resolution_transfer:
             implemented_checks.add("resolution_transfer")
         implemented_checks.update(check.name for check in self.check_evaluators)
@@ -168,7 +173,10 @@ class NeuralOperatorStep:
                     },
                 )
 
-        claims = [_held_out_claim(outcome.metrics, self.options)]
+        claims = [
+            operator_dataset_integrity_claim(outcome.data_quality),
+            _held_out_claim(outcome.metrics, self.options),
+        ]
         if outcome.resolution_transfer:
             claims.append(_resolution_claim(outcome.metrics, self.options))
         claims.extend(custom_claims)

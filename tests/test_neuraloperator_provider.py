@@ -107,6 +107,11 @@ def test_fno_step_trains_writes_evidence_and_reloads(tmp_path):
     ).solve_result()
 
     assert result.trust_level == "verified"
+    claims = {claim.name: claim for claim in result.verification.claims}
+    assert claims["operator_dataset_integrity"].status == "passed"
+    assert claims["operator_dataset_integrity"].evidence[
+        "training_duplicate_input_fraction"
+    ] == 0.0
     assert result.quantity("validation_relative_l2_error") < 0.15
     assert (output / "operator_state.pt").is_file()
     assert (output / "held_out_fields.npz").is_file()

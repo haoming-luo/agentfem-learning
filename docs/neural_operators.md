@@ -130,6 +130,12 @@ leakage and duplicate inputs with contradictory outputs fail before training.
 This makes replicated files visible without letting them inflate validation
 evidence.
 
+Every maintained NeuralOperator result carries an
+`operator_dataset_integrity` verification claim. It records the independent
+input count and confirms that contradictory deterministic labels and exact
+training-input replicas in evidence partitions were rejected before
+optimization.
+
 ```python
 from agentfem_learning.neural_operators.neuraloperator import load_predictor
 

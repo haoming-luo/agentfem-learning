@@ -11,6 +11,7 @@ from agentfem.step_providers import StepOptionContract, StepProvider
 from agentfem_learning import __version__
 
 from .checks import OperatorCheck, OperatorCheckContext
+from .data_claims import operator_dataset_integrity_claim
 from .gino import GINOTrainingOptions, train_gino
 
 _PROVIDER_CHECKS = {
@@ -18,6 +19,7 @@ _PROVIDER_CHECKS = {
     "geometry_transfer",
     "output_query_transfer",
     "permutation_equivariance",
+    "operator_dataset_integrity",
 }
 
 
@@ -74,7 +76,11 @@ class GINOStep:
             )
             for check in self.check_evaluators
         )
-        implemented = {"held_out_field_error", "permutation_equivariance"}
+        implemented = {
+            "held_out_field_error",
+            "permutation_equivariance",
+            "operator_dataset_integrity",
+        }
         if outcome.geometry_transfer:
             implemented.add("geometry_transfer")
         if outcome.output_query_transfer:
@@ -160,6 +166,7 @@ class GINOStep:
                     },
                 )
         claims = [
+            operator_dataset_integrity_claim(outcome.data_quality),
             _held_out_claim(outcome.metrics, self.options),
             _permutation_claim(outcome.metrics, self.options),
         ]

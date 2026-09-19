@@ -41,6 +41,9 @@
   preserve exact replicas as visible evidence, reject contradictory duplicate
   labels, and keep repeated physical inputs atomic during automatic
   partitioning so they cannot leak from training into validation.
+- Attach the resulting independent-input and label-consistency audit as an
+  `operator_dataset_integrity` verification claim to every maintained neural
+  operator result.
 
 - Add the independent AgentFEM extension entry point.
 - Add a provider-neutral Mode-III `NeuralFieldSpec`.

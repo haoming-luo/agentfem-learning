@@ -357,6 +357,7 @@ def test_gino_trains_across_registered_geometries_and_reloads(tmp_path):
     assert result.quantity("validation_permutation_relative_l2_error") < 5.0e-5
     claims = {claim.name: claim for claim in result.verification.claims}
     assert set(claims) == {
+        "operator_dataset_integrity",
         "held_out_field_error",
         "geometry_transfer",
         "output_query_transfer",
@@ -375,6 +376,10 @@ def test_gino_trains_across_registered_geometries_and_reloads(tmp_path):
         "output_query_transfer_maximum_case_relative_l2_error"
     )
     assert claims["permutation_equivariance"].status == "passed"
+    assert claims["operator_dataset_integrity"].status == "passed"
+    assert claims["operator_dataset_integrity"].evidence[
+        "training_unique_input_count"
+    ] == 4
     assert provenance.verify_manifest(output / "result.json").verified is True
     manifest = json.loads((output / "result.json").read_text(encoding="utf-8"))
     assert manifest["metadata"]["method"] == "gino"
