@@ -60,14 +60,20 @@ default. Open3D and `torch-scatter` remain disabled until their optional
 dependency combinations pass installed-wheel evidence; selecting them now
 fails before training rather than changing execution silently.
 
+Every training result also checks point-order semantics. It reverses input
+points, cyclically permutes output queries, restores the output order, and
+records `permutation_equivariance` as an ordinary verification claim. This
+checks a numerical invariant of the coordinate-defined operator; it does not
+replace physical held-out evidence.
+
 ## Deliberate rejection boundary
 
 Variable point counts are not represented by padding and a mask merely to
 obtain a rectangular NPZ tensor.  Until a case-indexed ragged storage backend
 exists, such families must fail before training with a specific capability
 message.  Mixed spatial dimensions, changing channel semantics and unlabeled
-coordinate systems also fail closed. Reordering invariance remains a promotion
-gate rather than an assumed property of a registered family.
+coordinate systems also fail closed. Reordering invariance is measured rather
+than assumed from the registered-family declaration.
 
 The provider must not claim topology generalization solely because coordinates
 change.  Held-out evidence distinguishes at least:
@@ -108,8 +114,9 @@ installed wheel:
    requires it;
 6. geometry, boundary or balance checks supplied by the problem adapter;
 7. cold reload reproducing predictions within a declared tolerance;
-8. CPU dependency and memory bounds, plus one accelerated backend smoke test.
-9. Dense parameter-path evidence without an unresolved interior error spike.
+8. CPU dependency and memory bounds, plus one accelerated backend smoke test;
+9. dense parameter-path evidence without an unresolved interior error spike;
+10. point-order permutation evidence recorded in every training result.
 
 ## References
 

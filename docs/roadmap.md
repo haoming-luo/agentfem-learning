@@ -100,10 +100,12 @@ core `model.step(target=spec, executor=...)` boundary.
   The provider-owned held-out claim uses the maximum per-case field error,
   with aggregate, median, 95th-percentile and per-output diagnostics retained
   as quantities, so easy geometries cannot conceal a failed held-out case.
+  Every GINO result also carries a deterministic input/output point-permutation
+  claim, rather than leaving point-order independence as a test-only property.
   This closes the evidence protocol exposed by the perforated-plate radius
   audit; it does not by itself improve a trained model or promote GINO.
 - Complete GINO promotion with a real varying-geometry FEM case, independent
-  output-query transfer, permutation evidence, physics checks, cold installed-
+  output-query transfer, physics checks, cold installed-
   wheel reload and measured CPU/accelerator resource bounds. Add case-indexed
   ragged storage before claiming variable point counts; never pad irregular
   meshes merely to use an operator.

@@ -17,6 +17,7 @@ _PROVIDER_CHECKS = {
     "held_out_field_error",
     "geometry_transfer",
     "output_query_transfer",
+    "permutation_equivariance",
 }
 
 
@@ -73,7 +74,7 @@ class GINOStep:
             )
             for check in self.check_evaluators
         )
-        implemented = {"held_out_field_error"}
+        implemented = {"held_out_field_error", "permutation_equivariance"}
         if outcome.geometry_transfer:
             implemented.add("geometry_transfer")
         if outcome.output_query_transfer:
@@ -157,7 +158,10 @@ class GINOStep:
                         "dataset_fingerprint": self.dataset.fingerprint,
                     },
                 )
-        claims = [_held_out_claim(outcome.metrics, self.options)]
+        claims = [
+            _held_out_claim(outcome.metrics, self.options),
+            _permutation_claim(outcome.metrics, self.options),
+        ]
         if outcome.geometry_transfer:
             claims.append(_geometry_transfer_claim(outcome.metrics, self.options))
         if outcome.output_query_transfer:
@@ -197,6 +201,24 @@ def _held_out_claim(metrics, options):
             "p95_case_relative_l2_error": float(
                 metrics["validation_p95_case_relative_l2_error"]
             ),
+        },
+    )
+
+
+def _permutation_claim(metrics, options):
+    tolerance = 5.0e-5 if options.dtype == "float32" else 1.0e-10
+    return verification.VerificationClaim.compare(
+        name="permutation_equivariance",
+        observable="validation_permutation_relative_l2_error",
+        actual=float(metrics["validation_permutation_relative_l2_error"]),
+        expected=0.0,
+        reference="deterministically permuted input points and output queries",
+        absolute_tolerance=tolerance,
+        validity_domain="registered point fields evaluated by the trained GINO",
+        evidence={
+            "input_permutation": "reverse",
+            "output_permutation": "cyclic shift by one third of query count",
+            "dtype": options.dtype,
         },
     )
 

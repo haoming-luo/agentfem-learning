@@ -31,6 +31,8 @@
   verification evidence.
 - Make the GINO held-out claim depend on the maximum per-case physical-field
   error and add aggregate, median, 95th-percentile, and per-output metrics.
+- Record deterministic input-point and output-query permutation equivariance
+  as a provider-owned verification claim in every GINO result.
 
 - Add the independent AgentFEM extension entry point.
 - Add a provider-neutral Mode-III `NeuralFieldSpec`.

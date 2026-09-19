@@ -570,6 +570,16 @@ def train_gino(
         device=device,
         prefix="validation",
     )
+    metrics["validation_permutation_relative_l2_error"] = _permutation_consistency_error(
+        model,
+        input_statistics.normalize(x_validation),
+        transform.normalize(input_validation),
+        transform.normalize(output_validation),
+        output_statistics,
+        latent_shape=options.latent_shape,
+        device=device,
+        dtype_name=options.dtype,
+    )
     train_fingerprints = set(_coordinate_fingerprints(input_train))
     validation_fingerprints = set(
         _coordinate_fingerprints(transform.normalize(input_validation))
@@ -961,6 +971,49 @@ def _predict_arrays(
     if prediction is None:
         raise ValueError("GINO prediction requires at least one case.")
     return prediction
+
+
+def _permutation_consistency_error(
+    model,
+    x,
+    input_geometry,
+    output_queries,
+    output_statistics,
+    *,
+    latent_shape,
+    device,
+    dtype_name,
+) -> float:
+    """Measure point-order dependence without using reference solution fields."""
+
+    baseline = _predict_arrays(
+        model,
+        x,
+        input_geometry,
+        output_queries,
+        latent_shape=latent_shape,
+        device=device,
+        dtype_name=dtype_name,
+    )
+    input_permutation = np.arange(input_geometry.shape[1])[::-1]
+    output_permutation = np.roll(
+        np.arange(output_queries.shape[1]), max(output_queries.shape[1] // 3, 1)
+    )
+    permuted = _predict_arrays(
+        model,
+        x[:, input_permutation, :],
+        input_geometry[:, input_permutation, :],
+        output_queries[:, output_permutation, :],
+        latent_shape=latent_shape,
+        device=device,
+        dtype_name=dtype_name,
+    )
+    restored = np.empty_like(permuted)
+    restored[:, output_permutation, :] = permuted
+    baseline_physical = output_statistics.denormalize(baseline)
+    restored_physical = output_statistics.denormalize(restored)
+    denominator = max(float(np.linalg.norm(baseline_physical)), np.finfo(float).eps)
+    return float(np.linalg.norm(restored_physical - baseline_physical) / denominator)
 
 
 def _evaluate_dataset(

@@ -323,11 +323,13 @@ def test_gino_trains_across_registered_geometries_and_reloads(tmp_path):
     ) >= result.quantity("validation_temperature_rise_median_case_relative_l2_error")
     assert result.quantity("output_query_transfer_relative_l2_error") >= 0.0
     assert result.quantity("output_query_transfer_maximum_case_relative_l2_error") >= 0.0
+    assert result.quantity("validation_permutation_relative_l2_error") < 5.0e-5
     claims = {claim.name: claim for claim in result.verification.claims}
     assert set(claims) == {
         "held_out_field_error",
         "geometry_transfer",
         "output_query_transfer",
+        "permutation_equivariance",
     }
     assert claims["held_out_field_error"].observable == (
         "validation_maximum_case_relative_l2_error"
@@ -341,6 +343,7 @@ def test_gino_trains_across_registered_geometries_and_reloads(tmp_path):
     assert claims["output_query_transfer"].observable == (
         "output_query_transfer_maximum_case_relative_l2_error"
     )
+    assert claims["permutation_equivariance"].status == "passed"
     assert provenance.verify_manifest(output / "result.json").verified is True
     manifest = json.loads((output / "result.json").read_text(encoding="utf-8"))
     assert manifest["metadata"]["method"] == "gino"
