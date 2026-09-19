@@ -598,6 +598,9 @@ def train_gino(
         if not test_fingerprints.intersection(train_fingerprints):
             geometry_transfer = True
             metrics["geometry_transfer_relative_l2_error"] = metrics["test_relative_l2_error"]
+            metrics["geometry_transfer_maximum_case_relative_l2_error"] = metrics[
+                "test_maximum_case_relative_l2_error"
+            ]
         train_geometry_pairs = set(_geometry_groups(input_train, output_train))
         test_geometry_pairs = set(_geometry_groups(*test_geometry))
         output_query_transfer = test_fingerprints.issubset(train_fingerprints) and bool(
@@ -606,6 +609,9 @@ def train_gino(
         if output_query_transfer:
             metrics["output_query_transfer_relative_l2_error"] = metrics[
                 "test_relative_l2_error"
+            ]
+            metrics["output_query_transfer_maximum_case_relative_l2_error"] = metrics[
+                "test_maximum_case_relative_l2_error"
             ]
     metrics.update(
         {
@@ -981,7 +987,35 @@ def _evaluate_dataset(
     )
     physical = output_statistics.denormalize(normalized)
     denominator = max(float(np.linalg.norm(y)), np.finfo(float).eps)
-    metrics = {f"{prefix}_relative_l2_error": float(np.linalg.norm(physical - y) / denominator)}
+    residual = physical - y
+    case_axes = tuple(range(1, residual.ndim))
+    case_denominator = np.maximum(np.linalg.norm(y, axis=case_axes), np.finfo(float).eps)
+    case_relative_l2 = np.linalg.norm(residual, axis=case_axes) / case_denominator
+    metrics = {
+        f"{prefix}_relative_l2_error": float(np.linalg.norm(residual) / denominator),
+        f"{prefix}_maximum_case_relative_l2_error": float(np.max(case_relative_l2)),
+        f"{prefix}_median_case_relative_l2_error": float(np.median(case_relative_l2)),
+        f"{prefix}_p95_case_relative_l2_error": float(np.percentile(case_relative_l2, 95.0)),
+    }
+    start = 0
+    for item in specification.outputs:
+        channels = int(dataset.fields[item.name].shape[1])
+        stop = start + channels
+        output_residual = residual[..., start:stop]
+        output_reference = y[..., start:stop]
+        output_denominator = np.maximum(
+            np.linalg.norm(output_reference, axis=case_axes), np.finfo(float).eps
+        )
+        output_relative_l2 = (
+            np.linalg.norm(output_residual, axis=case_axes) / output_denominator
+        )
+        metrics[f"{prefix}_{item.name}_maximum_case_relative_l2_error"] = float(
+            np.max(output_relative_l2)
+        )
+        metrics[f"{prefix}_{item.name}_median_case_relative_l2_error"] = float(
+            np.median(output_relative_l2)
+        )
+        start = stop
     return (
         _split_point_outputs(
             physical,

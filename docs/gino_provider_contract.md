@@ -77,6 +77,16 @@ change.  Held-out evidence distinguishes at least:
 - a new discretization resolution;
 - a new topology or geometric class.
 
+Aggregate held-out error is not sufficient evidence for a continuous design
+space.  The provider-owned held-out claim accepts against the maximum per-case
+relative L2 error and reports the global, median, 95th-percentile, and
+per-output metrics separately.  A promoted varying-geometry case must also
+evaluate one or more dense, independent parameter paths.  AgentFEM-Learning's
+`parameter_path_reliability_check(...)` reports the worst per-case physical
+field error and rejects isolated interior error spikes even when the global
+error limit still passes.  Training nodes alone do not constitute a path
+audit.
+
 ## Dependency policy
 
 GINO remains an optional method extra.  PyTorch, NeuralOperator and optional
@@ -99,6 +109,7 @@ installed wheel:
 6. geometry, boundary or balance checks supplied by the problem adapter;
 7. cold reload reproducing predictions within a declared tolerance;
 8. CPU dependency and memory bounds, plus one accelerated backend smoke test.
+9. Dense parameter-path evidence without an unresolved interior error spike.
 
 ## References
 

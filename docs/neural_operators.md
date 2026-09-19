@@ -173,6 +173,41 @@ test dataset actually changes the spatial resolution. Supplying another
 dataset on the training resolution remains ordinary held-out testing and does
 not satisfy that check.
 
+Geometry operators also need evidence between the chosen training nodes.  A
+small mean validation error can hide one severe interpolation failure inside
+the parameter domain.  The reusable parameter-path check consumes an
+independent, ordered validation slice and records both the worst physical-field
+error and isolated interior error spikes:
+
+```python
+from agentfem_learning.neural_operators.neuraloperator import (
+    parameter_path_reliability_check,
+)
+
+path_check = parameter_path_reliability_check(
+    "hole_radius",
+    output_tolerances={"displacement": 0.08, "von_mises_stress": 0.15},
+    maximum_spike_ratio=2.5,
+)
+
+result = model.step(
+    target=operator_spec,
+    dataset=training_dataset,
+    validation_dataset=independent_radius_path,
+    check_evaluators=(path_check,),
+).solve_result()
+```
+
+The path must contain at least three distinct parameter values and independent
+reference fields.  The resulting claim identifies the worst case and spike
+location; it does not infer continuity from optimizer loss or from distance to
+the nearest training point.
+
+GINO's provider-owned `held_out_field_error` is conservative as well: its
+acceptance value is the maximum per-case relative L2 error.  The global,
+median-case, 95th-percentile, and per-output errors remain available as result
+quantities, so many easy geometries cannot hide one failed held-out geometry.
+
 FNO/TFNO remains the structured-grid route rather than a universal finite
 operator. GINO is the coordinate-aware route under the
 [geometry-informed provider contract](gino_provider_contract.md). Both remain

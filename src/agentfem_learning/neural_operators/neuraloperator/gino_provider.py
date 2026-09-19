@@ -182,21 +182,30 @@ class GINOStep:
 def _held_out_claim(metrics, options):
     return verification.VerificationClaim.compare(
         name="held_out_field_error",
-        observable="validation_relative_l2_error",
-        actual=float(metrics["validation_relative_l2_error"]),
+        observable="validation_maximum_case_relative_l2_error",
+        actual=float(metrics["validation_maximum_case_relative_l2_error"]),
         expected=0.0,
         reference="independent cases excluded from optimizer updates",
         absolute_tolerance=options.relative_l2_tolerance,
         validity_domain="declared point fields, registered geometries, and parameter domain",
-        evidence={"metric": "global relative L2 over held-out physical point fields"},
+        evidence={
+            "acceptance_metric": "maximum per-case relative L2 over physical point fields",
+            "global_relative_l2_error": float(metrics["validation_relative_l2_error"]),
+            "median_case_relative_l2_error": float(
+                metrics["validation_median_case_relative_l2_error"]
+            ),
+            "p95_case_relative_l2_error": float(
+                metrics["validation_p95_case_relative_l2_error"]
+            ),
+        },
     )
 
 
 def _geometry_transfer_claim(metrics, options):
     metric = (
-        "geometry_transfer_relative_l2_error"
-        if "geometry_transfer_relative_l2_error" in metrics
-        else "validation_relative_l2_error"
+        "geometry_transfer_maximum_case_relative_l2_error"
+        if "geometry_transfer_maximum_case_relative_l2_error" in metrics
+        else "validation_maximum_case_relative_l2_error"
     )
     return verification.VerificationClaim.compare(
         name="geometry_transfer",
@@ -206,7 +215,10 @@ def _geometry_transfer_claim(metrics, options):
         reference="cases whose exact input-geometry fingerprints are absent from training",
         absolute_tolerance=options.relative_l2_tolerance,
         validity_domain="registered topology deformations; not a new-topology claim",
-        evidence={"geometry_identity": "exact input-coordinate fingerprint"},
+        evidence={
+            "geometry_identity": "exact input-coordinate fingerprint",
+            "acceptance_metric": "maximum per-case relative L2",
+        },
     )
 
 
@@ -226,13 +238,18 @@ def _inconclusive_claim(name):
 def _output_query_transfer_claim(metrics, options):
     return verification.VerificationClaim.compare(
         name="output_query_transfer",
-        observable="output_query_transfer_relative_l2_error",
-        actual=float(metrics["output_query_transfer_relative_l2_error"]),
+        observable="output_query_transfer_maximum_case_relative_l2_error",
+        actual=float(metrics["output_query_transfer_maximum_case_relative_l2_error"]),
         expected=0.0,
         reference="independent test cases evaluated at a changed output-query set",
         absolute_tolerance=options.relative_l2_tolerance,
         validity_domain="declared coordinate bounds and registered field semantics",
-        evidence={"metric": "global relative L2 at independent output queries"},
+        evidence={
+            "acceptance_metric": "maximum per-case relative L2 at independent output queries",
+            "global_relative_l2_error": float(
+                metrics["output_query_transfer_relative_l2_error"]
+            ),
+        },
     )
 
 

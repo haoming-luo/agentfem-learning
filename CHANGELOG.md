@@ -25,6 +25,12 @@
 - Add a real varying-width AgentFEM heat-transfer example. Keep new topology,
   ragged point families and optional accelerated neighbor backends outside the
   first validated boundary.
+- Add a provider-neutral parameter-path reliability check for geometry and
+  other scalar design paths. It records per-output held-out field error,
+  worst-case identity and isolated interpolation spikes as ordinary AgentFEM
+  verification evidence.
+- Make the GINO held-out claim depend on the maximum per-case physical-field
+  error and add aggregate, median, 95th-percentile, and per-output metrics.
 
 - Add the independent AgentFEM extension entry point.
 - Add a provider-neutral Mode-III `NeuralFieldSpec`.

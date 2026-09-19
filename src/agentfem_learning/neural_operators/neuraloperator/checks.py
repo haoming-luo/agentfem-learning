@@ -7,6 +7,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from hashlib import sha256
 
+import numpy as np
 from agentfem import verification
 
 
@@ -50,18 +51,12 @@ class OperatorCheck:
         object.__setattr__(self, "description", str(self.description).strip())
         object.__setattr__(self, "metadata", dict(self.metadata))
 
-    def evaluate(
-        self, context: OperatorCheckContext
-    ) -> verification.VerificationClaim:
+    def evaluate(self, context: OperatorCheckContext) -> verification.VerificationClaim:
         claim = self.evaluator(context)
         if not isinstance(claim, verification.VerificationClaim):
-            raise TypeError(
-                f"Operator check {self.name!r} must return VerificationClaim."
-            )
+            raise TypeError(f"Operator check {self.name!r} must return VerificationClaim.")
         if claim.name != self.name:
-            raise ValueError(
-                f"Operator check {self.name!r} returned claim {claim.name!r}."
-            )
+            raise ValueError(f"Operator check {self.name!r} returned claim {claim.name!r}.")
         return claim
 
     def summary(self) -> dict[str, object]:
@@ -93,4 +88,167 @@ def _callable_identity(function) -> dict[str, object]:
     return identity
 
 
-__all__ = ["OperatorCheck", "OperatorCheckContext"]
+def parameter_path_reliability_check(
+    parameter: str,
+    *,
+    maximum_relative_l2: float = 0.10,
+    output_tolerances: Mapping[str, float] | None = None,
+    maximum_spike_ratio: float = 3.0,
+    name: str = "parameter_path_reliability",
+    version: str = "1",
+) -> OperatorCheck:
+    """Return a held-out check for continuous interpolation along one parameter.
+
+    The validation dataset must describe one path with at least three distinct
+    parameter values.  Every predicted output is compared with its independent
+    reference case by case.  Acceptance requires both the declared worst-case
+    field-error limits and the absence of an isolated interior error spike.
+
+    This check deliberately consumes physical held-out fields rather than
+    optimizer loss.  It is useful for geometry, loading, material, or other
+    scalar paths and makes no assumption about the operator architecture.
+    """
+
+    parameter_name = str(parameter).strip()
+    check_name = str(name).strip()
+    check_version = str(version).strip()
+    default_tolerance = float(maximum_relative_l2)
+    spike_limit = float(maximum_spike_ratio)
+    tolerances = {
+        str(key): float(value) for key, value in dict(output_tolerances or {}).items()
+    }
+    if not parameter_name:
+        raise ValueError("parameter must not be empty.")
+    if not check_name or not check_version:
+        raise ValueError("name and version must not be empty.")
+    if not np.isfinite(default_tolerance) or default_tolerance <= 0.0:
+        raise ValueError("maximum_relative_l2 must be finite and positive.")
+    if not np.isfinite(spike_limit) or spike_limit <= 1.0:
+        raise ValueError("maximum_spike_ratio must be finite and greater than one.")
+    if any(not np.isfinite(value) or value <= 0.0 for value in tolerances.values()):
+        raise ValueError("Every output tolerance must be finite and positive.")
+
+    def evaluate(context: OperatorCheckContext) -> verification.VerificationClaim:
+        dataset = context.validation_dataset
+        if dataset is None:
+            raise ValueError(f"{check_name!r} requires an explicit validation_dataset.")
+        parameters = getattr(dataset, "parameters", {})
+        if parameter_name not in parameters:
+            raise ValueError(f"Validation dataset has no parameter {parameter_name!r}.")
+        values = np.asarray(parameters[parameter_name], dtype=float).reshape(-1)
+        case_ids = tuple(str(item) for item in getattr(dataset, "case_ids", ()))
+        if values.size < 3:
+            raise ValueError("A parameter-path check requires at least three cases.")
+        if len(case_ids) != values.size:
+            raise ValueError("Parameter values and validation case IDs must align.")
+        if not np.isfinite(values).all():
+            raise ValueError("Parameter-path values must be finite.")
+        order = np.argsort(values, kind="stable")
+        sorted_values = values[order]
+        if np.any(np.diff(sorted_values) <= 0.0):
+            raise ValueError(
+                "Parameter-path values must be unique so interior spikes are defined."
+            )
+
+        available = tuple(key for key in context.predictions if key in context.references)
+        selected = tuple(tolerances) if tolerances else available
+        if not selected:
+            raise ValueError("No predicted/reference output pairs are available.")
+        missing = tuple(key for key in selected if key not in available)
+        if missing:
+            raise ValueError(f"Parameter-path outputs are unavailable: {missing!r}.")
+
+        output_errors: dict[str, np.ndarray] = {}
+        normalized_errors = []
+        for output_name in selected:
+            predicted = np.asarray(context.predictions[output_name], dtype=float)
+            reference = np.asarray(context.references[output_name], dtype=float)
+            if predicted.shape != reference.shape or predicted.shape[0] != values.size:
+                raise ValueError(
+                    f"Output {output_name!r} prediction/reference arrays must match "
+                    "and start with the validation case axis."
+                )
+            if not np.isfinite(predicted).all() or not np.isfinite(reference).all():
+                raise ValueError(f"Output {output_name!r} contains non-finite values.")
+            delta = (predicted - reference).reshape(values.size, -1)
+            reference_flat = reference.reshape(values.size, -1)
+            numerator = np.linalg.norm(delta, axis=1)
+            denominator = np.linalg.norm(reference_flat, axis=1)
+            global_scale = max(float(np.linalg.norm(reference_flat)), 1.0)
+            floor = np.finfo(float).eps * global_scale
+            errors = numerator / np.maximum(denominator, floor)
+            output_errors[output_name] = errors[order]
+            tolerance = tolerances.get(output_name, default_tolerance)
+            normalized_errors.append(errors[order] / tolerance)
+
+        case_risk = np.max(np.stack(normalized_errors, axis=0), axis=0)
+        interior_expected = case_risk[:-2] + (
+            (case_risk[2:] - case_risk[:-2])
+            * (sorted_values[1:-1] - sorted_values[:-2])
+            / (sorted_values[2:] - sorted_values[:-2])
+        )
+        risk_floor = max(float(np.median(case_risk)) * 0.05, 1.0e-12)
+        spike_ratios = case_risk[1:-1] / np.maximum(interior_expected, risk_floor)
+        worst_index = int(np.argmax(case_risk))
+        spike_offset = int(np.argmax(spike_ratios))
+        spike_index = spike_offset + 1
+        worst_spike = float(spike_ratios[spike_offset])
+        normalized_contract = np.asarray(
+            [float(case_risk[worst_index]), worst_spike / spike_limit]
+        )
+        sorted_case_ids = tuple(case_ids[index] for index in order)
+        evidence = {
+            "parameter": parameter_name,
+            "parameter_values": sorted_values.tolist(),
+            "case_ids": sorted_case_ids,
+            "output_relative_l2": {
+                key: values.tolist() for key, values in output_errors.items()
+            },
+            "output_tolerances": {
+                key: tolerances.get(key, default_tolerance) for key in selected
+            },
+            "case_risk": case_risk.tolist(),
+            "worst_case_id": sorted_case_ids[worst_index],
+            "worst_parameter_value": float(sorted_values[worst_index]),
+            "maximum_spike_ratio": worst_spike,
+            "spike_case_id": sorted_case_ids[spike_index],
+            "spike_parameter_value": float(sorted_values[spike_index]),
+            "spike_ratio_limit": spike_limit,
+        }
+        return verification.VerificationClaim.compare(
+            name=check_name,
+            observable="normalized worst field error and interior spike ratio",
+            actual=normalized_contract,
+            expected=np.zeros(2),
+            reference="independent physical fields sampled along one parameter path",
+            absolute_tolerance=1.0,
+            validity_domain=(
+                f"held-out path in parameter {parameter_name!r}; "
+                "does not establish behavior outside the sampled interval"
+            ),
+            evidence=evidence,
+        )
+
+    return OperatorCheck(
+        name=check_name,
+        evaluator=evaluate,
+        version=check_version,
+        description=(
+            "Worst-case held-out field error and isolated interpolation-spike "
+            f"audit along parameter {parameter_name!r}."
+        ),
+        metadata={
+            "parameter": parameter_name,
+            "maximum_relative_l2": default_tolerance,
+            "output_tolerances": tolerances,
+            "maximum_spike_ratio": spike_limit,
+            "minimum_case_count": 3,
+        },
+    )
+
+
+__all__ = [
+    "OperatorCheck",
+    "OperatorCheckContext",
+    "parameter_path_reliability_check",
+]

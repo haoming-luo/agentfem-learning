@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -10,7 +11,11 @@ from agentfem.step_providers import step_providers
 from agentfem_learning.neural_operators.neuraloperator import (
     GINOTrainingOptions,
     load_predictor,
+    parameter_path_reliability_check,
     train_gino,
+)
+from agentfem_learning.neural_operators.neuraloperator.checks import (
+    OperatorCheckContext,
 )
 from agentfem_learning.neural_operators.neuraloperator.extension import extension
 
@@ -153,6 +158,125 @@ def _options(**updates):
     return GINOTrainingOptions(**values)
 
 
+def _parameter_path_context(errors):
+    errors = np.asarray(errors, dtype=float)
+    reference = np.ones((len(errors), 1, 4), dtype=float)
+    prediction = reference * (1.0 + errors[:, None, None])
+    dataset = SimpleNamespace(
+        case_ids=tuple(f"radius-{value:.2f}" for value in np.linspace(0.1, 0.5, len(errors))),
+        parameters={"hole_radius": np.linspace(0.1, 0.5, len(errors))},
+    )
+    return OperatorCheckContext(
+        specification=object(),
+        training_dataset=object(),
+        validation_dataset=dataset,
+        predictions={"stress": prediction},
+        references={"stress": reference},
+        metrics={},
+    )
+
+
+def test_parameter_path_check_accepts_smooth_held_out_errors():
+    check = parameter_path_reliability_check(
+        "hole_radius",
+        output_tolerances={"stress": 0.10},
+        maximum_spike_ratio=2.0,
+    )
+    claim = check.evaluate(_parameter_path_context([0.02, 0.03, 0.04, 0.03, 0.02]))
+
+    assert claim.status == "passed"
+    assert claim.evidence["worst_case_id"] == "radius-0.30"
+    assert claim.evidence["output_relative_l2"]["stress"] == pytest.approx(
+        [0.02, 0.03, 0.04, 0.03, 0.02]
+    )
+    assert check.summary()["metadata"]["parameter"] == "hole_radius"
+
+
+def test_parameter_path_check_rejects_an_interior_error_spike():
+    check = parameter_path_reliability_check(
+        "hole_radius",
+        output_tolerances={"stress": 0.10},
+        maximum_spike_ratio=2.0,
+    )
+    claim = check.evaluate(_parameter_path_context([0.02, 0.025, 0.08, 0.025, 0.02]))
+
+    assert claim.status == "failed"
+    assert claim.evidence["spike_case_id"] == "radius-0.30"
+    assert claim.evidence["maximum_spike_ratio"] > 3.0
+    assert claim.actual[0] < 1.0
+    assert claim.actual[1] > 1.0
+
+
+def test_parameter_path_check_fails_closed_for_duplicate_coordinates():
+    context = _parameter_path_context([0.01, 0.02, 0.03])
+    context.validation_dataset.parameters["hole_radius"] = np.asarray([0.1, 0.1, 0.2])
+    check = parameter_path_reliability_check("hole_radius")
+
+    with pytest.raises(ValueError, match="must be unique"):
+        check.evaluate(context)
+
+
+def test_parameter_path_check_enters_gino_result_lifecycle(tmp_path):
+    _activate_extension()
+    training = _dataset([0.8, 1.0, 1.2], prefix="train-path")
+    validation = _dataset([0.85, 0.90, 0.95], prefix="validation-path")
+    source, response = _encodings()
+    specification = learning.NeuralOperatorSpec(
+        architecture="gino",
+        inputs=(source,),
+        outputs=(response,),
+        boundary_encoding="explicit point coordinates",
+        parameter_inputs=("geometry_scale",),
+        required_checks=(
+            "held_out_field_error",
+            "geometry_transfer",
+            "parameter_path_reliability",
+        ),
+    )
+    check = parameter_path_reliability_check(
+        "geometry_scale",
+        output_tolerances={"temperature_rise": 10.0},
+        maximum_spike_ratio=1.0e6,
+    )
+    model = models.create(
+        study=studies.steady_heat_transfer(dimension=2),
+        name="geometry_path_audit",
+    )
+    output = tmp_path / "path-audit"
+    result = model.step(
+        target=specification,
+        dataset=training,
+        validation_dataset=validation,
+        input_geometry="nodes",
+        output_queries="queries",
+        latent_shape=(4, 4),
+        n_modes=(2, 2),
+        hidden_channels=4,
+        n_layers=1,
+        input_radius=0.8,
+        output_radius=0.8,
+        epochs=2,
+        batch_size=2,
+        patience=2,
+        device="cpu",
+        relative_l2_tolerance=10.0,
+        check_evaluators=(check,),
+        output=output,
+    ).solve_result()
+
+    claims = {item.name: item for item in result.verification.claims}
+    assert claims["parameter_path_reliability"].status == "passed"
+    assert claims["parameter_path_reliability"].evidence["parameter_values"] == [
+        0.85,
+        0.90,
+        0.95,
+    ]
+    assert result.metadata["verification_coverage"]["missing"] == ()
+    manifest = json.loads((output / "result.json").read_text(encoding="utf-8"))
+    names = {item["name"] for item in manifest["verification"]["claims"]}
+    assert "parameter_path_reliability" in names
+
+
 def test_gino_trains_across_registered_geometries_and_reloads(tmp_path):
     _activate_extension()
     training = _dataset([0.8, 0.9, 1.0, 1.1], prefix="train")
@@ -191,12 +315,32 @@ def test_gino_trains_across_registered_geometries_and_reloads(tmp_path):
     assert result.quantity("training_geometry_count") == 4.0
     assert result.quantity("validation_geometry_count") == 2.0
     assert result.quantity("validation_relative_l2_error") >= 0.0
+    assert result.quantity("validation_maximum_case_relative_l2_error") >= result.quantity(
+        "validation_median_case_relative_l2_error"
+    )
+    assert result.quantity(
+        "validation_temperature_rise_maximum_case_relative_l2_error"
+    ) >= result.quantity("validation_temperature_rise_median_case_relative_l2_error")
     assert result.quantity("output_query_transfer_relative_l2_error") >= 0.0
-    assert {claim.name for claim in result.verification.claims} == {
+    assert result.quantity("output_query_transfer_maximum_case_relative_l2_error") >= 0.0
+    claims = {claim.name: claim for claim in result.verification.claims}
+    assert set(claims) == {
         "held_out_field_error",
         "geometry_transfer",
         "output_query_transfer",
     }
+    assert claims["held_out_field_error"].observable == (
+        "validation_maximum_case_relative_l2_error"
+    )
+    assert claims["held_out_field_error"].evidence["global_relative_l2_error"] == (
+        result.quantity("validation_relative_l2_error")
+    )
+    assert claims["geometry_transfer"].observable == (
+        "validation_maximum_case_relative_l2_error"
+    )
+    assert claims["output_query_transfer"].observable == (
+        "output_query_transfer_maximum_case_relative_l2_error"
+    )
     assert provenance.verify_manifest(output / "result.json").verified is True
     manifest = json.loads((output / "result.json").read_text(encoding="utf-8"))
     assert manifest["metadata"]["method"] == "gino"

@@ -94,6 +94,14 @@ core `model.step(target=spec, executor=...)` boundary.
   gradient-accumulated micro-batches. Geometry transforms, radii, neighbor
   backend, state and held-out geometry evidence follow the ordinary
   `SimulationResult` lifecycle.
+- **Continuous parameter-path evidence implemented:** a reusable scientific
+  check now records per-output held-out field errors, the worst parameter
+  location and isolated interpolation spikes along any declared scalar path.
+  The provider-owned held-out claim uses the maximum per-case field error,
+  with aggregate, median, 95th-percentile and per-output diagnostics retained
+  as quantities, so easy geometries cannot conceal a failed held-out case.
+  This closes the evidence protocol exposed by the perforated-plate radius
+  audit; it does not by itself improve a trained model or promote GINO.
 - Complete GINO promotion with a real varying-geometry FEM case, independent
   output-query transfer, permutation evidence, physics checks, cold installed-
   wheel reload and measured CPU/accelerator resource bounds. Add case-indexed

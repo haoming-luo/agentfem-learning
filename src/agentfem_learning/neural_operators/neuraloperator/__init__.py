@@ -7,7 +7,11 @@ from .api import (
     load_predictor,
     train_operator,
 )
-from .checks import OperatorCheck, OperatorCheckContext
+from .checks import (
+    OperatorCheck,
+    OperatorCheckContext,
+    parameter_path_reliability_check,
+)
 from .gino import (
     GINOOutcome,
     GINOPredictor,
@@ -33,6 +37,7 @@ __all__ = [
     "OperatorCheckContext",
     "load_gino_predictor",
     "load_predictor",
+    "parameter_path_reliability_check",
     "train_gino",
     "train_operator",
 ]
