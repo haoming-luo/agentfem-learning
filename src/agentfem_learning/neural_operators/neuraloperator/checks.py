@@ -10,6 +10,8 @@ from hashlib import sha256
 import numpy as np
 from agentfem import verification
 
+from ..refinement import ParameterPathRefinementPlan
+
 
 @dataclass(frozen=True)
 class OperatorCheckContext:
@@ -67,29 +69,6 @@ class OperatorCheck:
             "description": self.description,
             "evaluator": _callable_identity(self.evaluator),
             "metadata": dict(self.metadata),
-        }
-
-
-@dataclass(frozen=True)
-class ParameterPathRefinementPlan:
-    """Bounded candidate set selected from failed independent path evidence."""
-
-    parameter: str
-    values: tuple[float, ...]
-    case_ids: tuple[str, ...]
-    risks: tuple[float, ...]
-    strategy: str = "risk_diversity"
-    reason: str = "failed_path_evidence"
-
-    def summary(self) -> dict[str, object]:
-        return {
-            "kind": "parameter_path_refinement_plan",
-            "parameter": self.parameter,
-            "values": self.values,
-            "case_ids": self.case_ids,
-            "risks": self.risks,
-            "strategy": self.strategy,
-            "reason": self.reason,
         }
 
 

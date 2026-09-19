@@ -103,10 +103,12 @@ core `model.step(target=spec, executor=...)` boundary.
   Every GINO result also carries a deterministic input/output point-permutation
   claim, rather than leaving point-order independence as a test-only property.
   Failed path evidence can now be reduced to a bounded, diverse refinement
-  plan for new reference-solver samples; dataset mutation and retraining remain
-  explicit project actions.
-  This closes the evidence protocol exposed by the perforated-plate radius
-  audit; it does not by itself improve a trained model or promote GINO.
+  plan for new reference-solver samples. A strict refinement transaction now
+  promotes trusted cases, removes them from validation, preserves a viable
+  independent path, merges compatible field datasets, and records before/after
+  fingerprints. Retraining remains an explicit ordinary Step action.
+  This closes the first evidence-driven refinement loop exposed by the
+  perforated-plate radius audit; it does not by itself promote GINO.
 - Complete GINO promotion with a real varying-geometry FEM case, independent
   output-query transfer, physics checks, cold installed-
   wheel reload and measured CPU/accelerator resource bounds. Add case-indexed

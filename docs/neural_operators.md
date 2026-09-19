@@ -245,18 +245,37 @@ plan:
 from agentfem_learning.neural_operators.neuraloperator import (
     parameter_path_refinement_plan,
 )
+from agentfem_learning.neural_operators import apply_parameter_path_refinement
 
 plan = parameter_path_refinement_plan(
     path_claim,
     existing_values=training_dataset.parameters["hole_radius"],
     maximum_candidates=3,
 )
+
+refinement = apply_parameter_path_refinement(
+    training_dataset,
+    independent_path_dataset,
+    plan,
+)
+
+result = model.step(
+    target=operator_spec,
+    dataset=refinement.training_dataset,
+    validation_dataset=refinement.validation_dataset,
+    check_evaluators=(path_check,),
+).solve_result()
 ```
 
 The plan balances measured field risk with distance from existing samples. It
-does not synthesize labels or mutate the dataset: the project evaluates those
-parameters with AgentFEM or another declared reference solver, appends the new
-cases, and reruns the same independent path check.
+does not synthesize labels. `apply_parameter_path_refinement(...)` promotes
+only cases that already carry trusted reference fields, removes them from the
+validation path before merging, preserves at least three independent path
+points, and records before/after dataset fingerprints. Values not yet computed
+must first be evaluated with AgentFEM or another declared reference solver;
+their dataset can enter through `merge_operator_datasets(...)`. Retraining
+remains the ordinary `model.step(...)` workflow rather than a second hidden
+trainer.
 
 FNO/TFNO remains the structured-grid route rather than a universal finite
 operator. GINO is the coordinate-aware route under the

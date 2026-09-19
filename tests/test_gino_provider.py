@@ -8,6 +8,7 @@ import pytest
 from agentfem import datasets, extensions, learning, models, provenance, studies
 from agentfem.step_providers import step_providers
 
+from agentfem_learning.neural_operators import apply_parameter_path_refinement
 from agentfem_learning.neural_operators.neuraloperator import (
     GINOTrainingOptions,
     load_predictor,
@@ -306,6 +307,63 @@ def test_parameter_path_check_enters_gino_result_lifecycle(tmp_path):
     manifest = json.loads((output / "result.json").read_text(encoding="utf-8"))
     names = {item["name"] for item in manifest["verification"]["claims"]}
     assert "parameter_path_reliability" in names
+
+
+def test_failed_path_plan_refines_retrains_and_rechecks_independent_cases():
+    training = _dataset([0.8, 1.2], prefix="cycle-train")
+    validation = _dataset([0.85, 0.90, 0.95, 1.00, 1.05], prefix="cycle-path")
+    reference = validation.fields["temperature_rise"]
+    synthetic_prediction = reference * np.asarray(
+        [1.01, 1.04, 1.14, 1.08, 1.01]
+    )[:, None, None]
+    strict_check = parameter_path_reliability_check(
+        "geometry_scale",
+        output_tolerances={"temperature_rise": 0.05},
+        maximum_spike_ratio=2.0,
+    )
+    failed = strict_check.evaluate(
+        OperatorCheckContext(
+            specification=_specification(parameter_inputs=("geometry_scale",)),
+            training_dataset=training,
+            validation_dataset=validation,
+            predictions={"temperature_rise": synthetic_prediction},
+            references={"temperature_rise": reference},
+            metrics={},
+        )
+    )
+    plan = parameter_path_refinement_plan(
+        failed,
+        existing_values=training.parameters["geometry_scale"],
+        maximum_candidates=2,
+    )
+    refinement = apply_parameter_path_refinement(training, validation, plan)
+
+    outcome = train_gino(
+        _specification(parameter_inputs=("geometry_scale",)),
+        refinement.training_dataset,
+        _options(epochs=1),
+        validation_dataset=refinement.validation_dataset,
+    )
+    permissive_check = parameter_path_reliability_check(
+        "geometry_scale",
+        output_tolerances={"temperature_rise": 10.0},
+        maximum_spike_ratio=1.0e6,
+    )
+    rechecked = permissive_check.evaluate(
+        OperatorCheckContext(
+            specification=_specification(parameter_inputs=("geometry_scale",)),
+            training_dataset=refinement.training_dataset,
+            validation_dataset=refinement.validation_dataset,
+            predictions=outcome.predictions,
+            references=outcome.references,
+            metrics=outcome.metrics,
+        )
+    )
+
+    assert failed.status == "failed"
+    assert len(refinement.added_case_ids) == 2
+    assert set(outcome.train_case_ids).isdisjoint(outcome.validation_case_ids)
+    assert rechecked.status == "passed"
 
 
 def test_gino_trains_across_registered_geometries_and_reloads(tmp_path):

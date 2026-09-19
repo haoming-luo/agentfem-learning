@@ -44,6 +44,10 @@
 - Attach the resulting independent-input and label-consistency audit as an
   `operator_dataset_integrity` verification claim to every maintained neural
   operator result.
+- Add an auditable parameter-path refinement transaction: trusted failed-path
+  cases move into training, leave the validation path, preserve a minimum
+  independent audit set, and retain before/after dataset fingerprints before
+  the ordinary provider retrains the model.
 
 - Add the independent AgentFEM extension entry point.
 - Add a provider-neutral Mode-III `NeuralFieldSpec`.
