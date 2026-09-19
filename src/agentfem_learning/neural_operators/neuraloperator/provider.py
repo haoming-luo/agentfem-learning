@@ -88,6 +88,7 @@ class NeuralOperatorStep:
                 "training_options": asdict(self.options),
                 "training": outcome.ledger.summary(),
                 "dataset": self.dataset.summary(),
+                "data_quality": dict(outcome.data_quality),
                 "check_evaluators": [
                     check.summary() for check in self.check_evaluators
                 ],

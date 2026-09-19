@@ -122,6 +122,14 @@ inside a group, and accumulates gradients across distinct-geometry
 micro-batches. Every case still carries its own geometry identity and no case
 is padded.
 
+Stored case count and independent operator-input count are reported
+separately. The latter fingerprints input fields, declared parameters, input
+geometry, and output queries together. Automatic validation splitting keeps
+all exact replicas in one partition; explicit partitions with training-input
+leakage and duplicate inputs with contradictory outputs fail before training.
+This makes replicated files visible without letting them inflate validation
+evidence.
+
 ```python
 from agentfem_learning.neural_operators.neuraloperator import load_predictor
 

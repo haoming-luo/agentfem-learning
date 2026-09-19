@@ -14,6 +14,14 @@ from pathlib import Path
 import numpy as np
 
 from ...training import TrainingEpoch, TrainingLedger
+from ..data_quality import (
+    OperatorDatasetAudit,
+    audit_operator_dataset,
+    grouped_validation_indices,
+    operator_audit_metrics,
+    require_consistent_operator_labels,
+    require_independent_operator_partitions,
+)
 from .api import _require_disjoint_case_ids, _resolve_device, _set_seed
 
 
@@ -197,6 +205,7 @@ class GINOOutcome:
     coordinate_transform: _CoordinateTransform
     model_configuration: Mapping[str, object]
     geometry_configuration: Mapping[str, object]
+    data_quality: Mapping[str, object]
     train_case_ids: tuple[str, ...]
     validation_case_ids: tuple[str, ...]
     validation_dataset: object
@@ -219,6 +228,7 @@ class GINOOutcome:
                 },
                 "model_configuration": dict(self.model_configuration),
                 "geometry_configuration": dict(self.geometry_configuration),
+                "data_quality": dict(self.data_quality),
                 "input_statistics": self.input_statistics.summary(),
                 "output_statistics": self.output_statistics.summary(),
                 "coordinate_transform": self.coordinate_transform.summary(),
@@ -253,6 +263,7 @@ class GINOOutcome:
                 {
                     "metrics": dict(self.metrics),
                     "geometry": dict(self.geometry_configuration),
+                    "data_quality": dict(self.data_quality),
                     "train_case_ids": self.train_case_ids,
                     "validation_case_ids": self.validation_case_ids,
                     "test_case_ids": self.test_case_ids,
@@ -387,17 +398,44 @@ def train_gino(
 
     _validate_gino_contract(specification, dataset, options)
     if validation_dataset is None:
-        split = dataset.split(
+        complete_audit = _audit_gino_dataset(specification, dataset, options)
+        require_consistent_operator_labels(
+            complete_audit, partition="dataset", provider="GINO"
+        )
+        training_indices, validation_indices = grouped_validation_indices(
+            complete_audit.input_fingerprints,
             validation_fraction=options.validation_fraction,
             seed=options.seed,
         )
-        training, validation = split.train, split.validation
+        training = dataset.subset(training_indices, name=f"{dataset.name}_train")
+        validation = dataset.subset(
+            validation_indices, name=f"{dataset.name}_validation"
+        )
     else:
         training, validation = dataset, validation_dataset
         _validate_gino_contract(specification, validation, options)
     if test_dataset is not None:
         _validate_gino_contract(specification, test_dataset, options)
     _require_disjoint_case_ids(training, validation, test_dataset)
+
+    training_audit = _audit_gino_dataset(specification, training, options)
+    validation_audit = _audit_gino_dataset(specification, validation, options)
+    require_consistent_operator_labels(
+        training_audit, partition="training", provider="GINO"
+    )
+    require_consistent_operator_labels(
+        validation_audit, partition="validation", provider="GINO"
+    )
+    require_independent_operator_partitions(
+        training_audit, validation_audit, right_name="validation", provider="GINO"
+    )
+    test_audit = None
+    if test_dataset is not None:
+        test_audit = _audit_gino_dataset(specification, test_dataset, options)
+        require_consistent_operator_labels(test_audit, partition="test", provider="GINO")
+        require_independent_operator_partitions(
+            training_audit, test_audit, right_name="test", provider="GINO"
+        )
 
     x_train, y_train, input_train, output_train = _point_data(specification, training, options)
     x_validation, y_validation, input_validation, output_validation = _point_data(
@@ -650,8 +688,22 @@ def train_gino(
             "validation_coordinate_outside_training_fraction": transform.outside_fraction(
                 np.concatenate((input_validation, output_validation), axis=1)
             ),
+            **operator_audit_metrics("training", training_audit),
+            **operator_audit_metrics("validation", validation_audit),
         }
     )
+    if test_audit is not None:
+        metrics.update(operator_audit_metrics("test", test_audit))
+    data_quality = {
+        "identity": (
+            "declared input fields + parameters + input geometry + output queries"
+        ),
+        "partition_policy": "exact_input_groups_are_partition_atomic",
+        "conflict_tolerance": 1.0e-10,
+        "training": training_audit.summary(),
+        "validation": validation_audit.summary(),
+        "test": None if test_audit is None else test_audit.summary(),
+    }
     geometry_configuration = {
         "input_geometry": options.input_geometry,
         "output_queries": options.output_queries or options.input_geometry,
@@ -679,6 +731,7 @@ def train_gino(
         coordinate_transform=transform,
         model_configuration=configuration,
         geometry_configuration=geometry_configuration,
+        data_quality=data_quality,
         train_case_ids=training.case_ids,
         validation_case_ids=validation.case_ids,
         validation_dataset=validation,
@@ -839,6 +892,33 @@ def _point_data(specification, dataset, options):
     )
     x = _append_parameters(x, parameter_values, specification.parameter_inputs)
     return x, np.concatenate(outputs, axis=-1), input_geometry, output_queries
+
+
+def _audit_gino_dataset(specification, dataset, options) -> OperatorDatasetAudit:
+    output_name = options.output_queries or options.input_geometry
+    inputs = {
+        f"field:{item.name}": np.asarray(dataset.fields[item.name])
+        for item in specification.inputs
+    }
+    inputs.update(
+        {
+            f"parameter:{name}": np.asarray(dataset.parameters[name])
+            for name in specification.parameter_inputs
+        }
+    )
+    inputs[f"coordinate:{options.input_geometry}"] = np.asarray(
+        dataset.coordinates[options.input_geometry]
+    )
+    inputs[f"coordinate:{output_name}"] = np.asarray(dataset.coordinates[output_name])
+    outputs = {
+        f"field:{item.name}": np.asarray(dataset.fields[item.name])
+        for item in specification.outputs
+    }
+    return audit_operator_dataset(
+        inputs=inputs,
+        outputs=outputs,
+        case_ids=dataset.case_ids,
+    )
 
 
 def _append_parameters(values, parameters, names):

@@ -405,11 +405,23 @@ def test_gino_trains_across_registered_geometries_and_reloads(tmp_path):
 
 def test_gino_native_geometry_batch_and_fail_closed_contracts():
     dataset = _dataset([1.0] * 6, prefix="shared")
+    validation = _dataset([1.1, 1.1], prefix="shared-validation")
     outcome = train_gino(
-        _specification(parameter_inputs=("geometry_scale",)), dataset, _options()
+        _specification(parameter_inputs=("geometry_scale",)),
+        dataset,
+        _options(),
+        validation_dataset=validation,
     )
     assert outcome.metrics["training_geometry_count"] == 1.0
-    assert outcome.geometry_transfer is False
+    assert outcome.metrics["training_case_count"] == 6.0
+    assert outcome.metrics["training_unique_operator_input_count"] == 1.0
+    assert outcome.metrics["training_duplicate_operator_input_fraction"] == pytest.approx(
+        5.0 / 6.0
+    )
+    assert outcome.data_quality["partition_policy"] == (
+        "exact_input_groups_are_partition_atomic"
+    )
+    assert outcome.geometry_transfer is True
 
     with pytest.raises(ValueError, match="neighbor_backend='native'"):
         GINOTrainingOptions(neighbor_backend="open3d")
@@ -425,6 +437,7 @@ def test_gino_native_geometry_batch_and_fail_closed_contracts():
             output_weighting_function="half_cos",
             output_weighting_scale=0.75,
         ),
+        validation_dataset=validation,
     )
     assert weighted.model_configuration["gno_weighting_function"] == "half_cos"
     assert weighted.geometry_configuration["output_weighting_scale"] == 0.75
@@ -457,4 +470,62 @@ def test_gino_native_geometry_batch_and_fail_closed_contracts():
                 input_radius=1.0e-6,
                 output_radius=1.0e-6,
             ),
+            validation_dataset=validation,
+        )
+
+
+def test_gino_automatic_split_keeps_duplicate_inputs_partition_atomic():
+    dataset = _dataset([0.8, 0.8, 1.0, 1.0, 1.2, 1.2], prefix="replica")
+    outcome = train_gino(
+        _specification(parameter_inputs=("geometry_scale",)),
+        dataset,
+        _options(validation_fraction=1.0 / 3.0, epochs=1),
+    )
+
+    assert set(outcome.train_case_ids).isdisjoint(outcome.validation_case_ids)
+    train_scales = {
+        float(dataset.parameters["geometry_scale"][dataset.case_ids.index(case_id)])
+        for case_id in outcome.train_case_ids
+    }
+    validation_scales = {
+        float(dataset.parameters["geometry_scale"][dataset.case_ids.index(case_id)])
+        for case_id in outcome.validation_case_ids
+    }
+    assert train_scales.isdisjoint(validation_scales)
+    assert outcome.metrics["training_unique_operator_input_count"] == 2.0
+    assert outcome.metrics["validation_unique_operator_input_count"] == 1.0
+
+
+def test_gino_rejects_contradictory_duplicate_operator_labels():
+    dataset = _dataset([1.0, 1.0, 1.2, 1.2], prefix="conflict")
+    fields = {name: np.asarray(values).copy() for name, values in dataset.fields.items()}
+    fields["temperature_rise"][1] *= 1.2
+    conflicting = datasets.ScientificFieldDataset(
+        case_ids=dataset.case_ids,
+        encodings=dataset.encodings,
+        fields=fields,
+        parameters=dataset.parameters,
+        coordinates=dataset.coordinates,
+        name=dataset.name,
+        metadata=dataset.metadata,
+    )
+
+    with pytest.raises(ValueError, match="contradictory outputs"):
+        train_gino(
+            _specification(parameter_inputs=("geometry_scale",)),
+            conflicting,
+            _options(epochs=1),
+        )
+
+
+def test_gino_rejects_exact_input_leakage_across_explicit_partitions():
+    training = _dataset([0.8, 1.0], prefix="train-leak")
+    validation = _dataset([1.0, 1.2], prefix="validation-leak")
+
+    with pytest.raises(ValueError, match="share 1 exact declared operator input"):
+        train_gino(
+            _specification(parameter_inputs=("geometry_scale",)),
+            training,
+            _options(epochs=1),
+            validation_dataset=validation,
         )

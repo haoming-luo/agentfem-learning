@@ -37,6 +37,10 @@
   functions with validated, persisted provider options.
 - Add evidence-driven parameter-path refinement plans that select a bounded,
   diverse set of high-risk cases for new trusted-solver evaluations.
+- Audit the independent information content of FNO, TFNO and GINO datasets,
+  preserve exact replicas as visible evidence, reject contradictory duplicate
+  labels, and keep repeated physical inputs atomic during automatic
+  partitioning so they cannot leak from training into validation.
 
 - Add the independent AgentFEM extension entry point.
 - Add a provider-neutral Mode-III `NeuralFieldSpec`.

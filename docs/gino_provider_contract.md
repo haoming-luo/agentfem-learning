@@ -73,6 +73,27 @@ records `permutation_equivariance` as an ordinary verification claim. This
 checks a numerical invariant of the coordinate-defined operator; it does not
 replace physical held-out evidence.
 
+## Independent information, not file count
+
+Case count is not treated as independent information count. Before training,
+the provider fingerprints the complete declared operator input: named input
+fields, parameters, input coordinates, and output-query coordinates.
+It reports both the number of files/cases and the number of unique mappings.
+Exact replicas remain visible rather than being silently discarded.
+
+Automatic train/validation splitting is performed on these input-identity
+groups, so replicas of one physical mapping cannot leak into both partitions.
+Explicit validation and test datasets are rejected when they contain an exact
+training-input replica. If one exact declared input maps to materially
+different output labels, training fails and asks for the missing physical
+field or parameter; averaging contradictory supervision would change the
+scientific problem.
+
+The bounded `data_quality` record and result quantities include unique-input
+count, duplicate count/fraction, largest replica group, and the maximum output
+difference among replicas. Thus a dataset containing 90 stored cases but only
+30 independent operator inputs says so explicitly in its evidence.
+
 ## Deliberate rejection boundary
 
 Variable point counts are not represented by padding and a mask merely to
@@ -124,6 +145,8 @@ installed wheel:
 8. CPU dependency and memory bounds, plus one accelerated backend smoke test;
 9. dense parameter-path evidence without an unresolved interior error spike;
 10. point-order permutation evidence recorded in every training result.
+11. independent-input counts, contradiction checks, and leakage-free data
+    partitions recorded in every training result.
 
 ## References
 

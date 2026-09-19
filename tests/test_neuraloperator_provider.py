@@ -36,6 +36,7 @@ def _operator_dataset(
     case_count: int = 18,
     spatial_size: int = 8,
     case_prefix: str = "heat",
+    amplitude_bounds: tuple[float, float] = (0.5, 2.0),
 ):
     shape = (1, spatial_size, spatial_size)
     source = learning.FieldEncoding(
@@ -58,7 +59,7 @@ def _operator_dataset(
     y = np.linspace(0.0, 1.0, spatial_size)
     xx, yy = np.meshgrid(x, y, indexing="ij")
     spatial = np.sin(np.pi * xx) * np.sin(np.pi * yy)
-    amplitudes = np.linspace(0.5, 2.0, case_count)
+    amplitudes = np.linspace(*amplitude_bounds, case_count)
     inputs = np.asarray([(amplitude * spatial)[None, ...] for amplitude in amplitudes])
     outputs = 2.5 * inputs
     return (
@@ -112,6 +113,8 @@ def test_fno_step_trains_writes_evidence_and_reloads(tmp_path):
     assert (output / "training_ledger.json").is_file()
     manifest = json.loads((output / "result.json").read_text(encoding="utf-8"))
     assert manifest["metadata"]["dataset"]["fingerprint"] == dataset.fingerprint
+    assert manifest["metadata"]["data_quality"]["training"]["unique_input_count"] > 1
+    assert result.quantity("training_duplicate_operator_input_count") == 0.0
     assert manifest["metadata"]["verification_coverage"]["missing"] == []
     assert provenance.verify_manifest(output / "result.json").verified is True
 
@@ -281,11 +284,16 @@ def test_named_physics_check_is_fingerprinted_and_satisfies_required_check(tmp_p
 
 def test_resolution_transfer_requires_a_different_spatial_resolution():
     dataset, base = _operator_dataset()
-    same_resolution, _ = _operator_dataset(case_count=4, case_prefix="same-test")
+    same_resolution, _ = _operator_dataset(
+        case_count=4,
+        case_prefix="same-test",
+        amplitude_bounds=(0.6, 1.9),
+    )
     changed_resolution, _ = _operator_dataset(
         case_count=4,
         spatial_size=10,
         case_prefix="changed-test",
+        amplitude_bounds=(0.6, 1.9),
     )
     options = NeuralOperatorTrainingOptions(
         n_modes=(2, 2),
@@ -306,3 +314,53 @@ def test_resolution_transfer_requires_a_different_spatial_resolution():
 
     with pytest.raises(ValueError, match="case IDs must be disjoint"):
         train_operator(base, dataset, options, test_dataset=dataset.subset(range(4)))
+
+
+def test_fno_split_keeps_replicas_atomic_and_rejects_conflicting_labels():
+    base_dataset, specification = _operator_dataset(case_count=6)
+    indices = np.asarray([0, 0, 2, 2, 5, 5])
+    replicas = datasets.ScientificFieldDataset(
+        case_ids=tuple(f"replica-{index}" for index in range(len(indices))),
+        encodings=base_dataset.encodings,
+        fields={
+            name: np.asarray(values)[indices].copy()
+            for name, values in base_dataset.fields.items()
+        },
+        parameters={
+            name: np.asarray(values)[indices].copy()
+            for name, values in base_dataset.parameters.items()
+        },
+        name="replicated_structured_operator",
+    )
+    options = NeuralOperatorTrainingOptions(
+        n_modes=(2, 2),
+        hidden_channels=4,
+        n_layers=1,
+        epochs=1,
+        batch_size=2,
+        validation_fraction=1.0 / 3.0,
+        patience=1,
+        device="cpu",
+    )
+
+    outcome = train_operator(specification, replicas, options)
+    train_pairs = {int(case_id.rsplit("-", 1)[1]) // 2 for case_id in outcome.train_case_ids}
+    validation_pairs = {
+        int(case_id.rsplit("-", 1)[1]) // 2 for case_id in outcome.validation_case_ids
+    }
+    assert train_pairs.isdisjoint(validation_pairs)
+    assert outcome.metrics["training_duplicate_operator_input_fraction"] == 0.5
+
+    conflicting_fields = {
+        name: np.asarray(values).copy() for name, values in replicas.fields.items()
+    }
+    conflicting_fields["temperature_rise"][1] *= 1.1
+    conflicting = datasets.ScientificFieldDataset(
+        case_ids=replicas.case_ids,
+        encodings=replicas.encodings,
+        fields=conflicting_fields,
+        parameters=replicas.parameters,
+        name=replicas.name,
+    )
+    with pytest.raises(ValueError, match="contradictory outputs"):
+        train_operator(specification, conflicting, options)

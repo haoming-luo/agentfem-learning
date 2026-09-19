@@ -94,6 +94,7 @@ class GINOStep:
                 "training": outcome.ledger.summary(),
                 "dataset": self.dataset.summary(),
                 "geometry": dict(outcome.geometry_configuration),
+                "data_quality": dict(outcome.data_quality),
                 "check_evaluators": [check.summary() for check in self.check_evaluators],
                 "verification_coverage": {
                     "required": self.specification.required_checks,
