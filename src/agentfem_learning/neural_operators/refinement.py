@@ -206,7 +206,17 @@ def merge_operator_datasets(base, additions, *, name: str | None = None):
         },
         case_metadata=(*base.case_metadata, *additions.case_metadata),
         name=str(name or f"{base.name}_refined"),
-        metadata=base.metadata,
+        metadata={
+            **dict(base.metadata),
+            "dataset_lineage": {
+                "operation": "append_compatible_operator_cases",
+                "base_fingerprint": base.fingerprint,
+                "addition_fingerprint": additions.fingerprint,
+                "base_case_count": base.case_count,
+                "addition_case_count": additions.case_count,
+                "addition_metadata": dict(additions.metadata),
+            },
+        },
     )
 
 
@@ -469,8 +479,13 @@ def merge_parameter_path_acquisition(
 def _require_compatible_dataset_schema(left, right) -> None:
     if tuple(left.encodings) != tuple(right.encodings):
         raise ValueError("Operator datasets must have identical field encodings.")
-    if dict(left.metadata) != dict(right.metadata):
-        raise ValueError("Operator datasets must have identical scientific metadata.")
+    left_contract = left.metadata.get("scientific_contract")
+    right_contract = right.metadata.get("scientific_contract")
+    if left_contract is None and right_contract is None:
+        if dict(left.metadata) != dict(right.metadata):
+            raise ValueError("Operator datasets must have identical scientific metadata.")
+    elif left_contract != right_contract:
+        raise ValueError("Operator datasets must have identical scientific contracts.")
     for label, left_values, right_values in (
         ("field", left.fields, right.fields),
         ("coordinate", left.coordinates, right.coordinates),

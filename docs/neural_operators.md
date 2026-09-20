@@ -280,8 +280,11 @@ trainer.
 For genuinely new cases, keep acquisition separate from promotion:
 
 ```python
-from agentfem import campaigns
-from agentfem_learning.neural_operators import merge_parameter_path_acquisition
+from agentfem import campaigns, datasets
+from agentfem_learning.neural_operators import (
+    NeuralOperatorCampaignAdapter,
+    merge_parameter_path_acquisition,
+)
 from agentfem_learning.neural_operators.neuraloperator import (
     parameter_path_acquisition_plan,
 )
@@ -296,8 +299,18 @@ space = campaigns.ParameterSpace.create(
 )
 sampling = acquisition.sampling_plan(space)
 
-# AgentFEM Campaign evaluates ``sampling``. A project adapter converts its
-# successful high-fidelity fields to ``acquired_dataset``.
+report = campaign.run(sampling, output_directory="outputs/acquisition")
+
+adapter = NeuralOperatorCampaignAdapter(
+    specification=operator_spec,
+    coordinate_names=("nodes", "queries"),
+    extract=lambda case, outcome: datasets.FieldCaseData(
+        fields=read_fields(outcome.artifacts),
+        coordinates=read_coordinates(outcome.artifacts),
+    ),
+)
+acquired_dataset = adapter.assemble(report, quality="engineering")
+
 merged = merge_parameter_path_acquisition(
     training_dataset,
     acquired_dataset,
@@ -309,7 +322,11 @@ The acquisition plan inserts high-risk interval midpoints rather than
 relabelling predictions as truth. It lowers to AgentFEM's existing explicit
 `SamplingPlan`, so case identity, resume, execution evidence and failure
 handling remain owned by Campaign. The returned field dataset must match every
-requested parameter value before it can be merged.
+requested parameter value before it can be merged. The problem adapter still
+declares how one solver artifact becomes physical fields; it no longer owns
+case iteration, quality gating, array stacking, provenance transfer, or the
+operator-schema check. Initial training campaigns and later acquisitions use
+the same adapter and therefore the same scientific contract.
 
 Independent-seed predictions can also be reduced to a provider-neutral risk
 signal with `operator_ensemble_disagreement(...)`. It reports normalized

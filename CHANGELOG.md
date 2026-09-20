@@ -52,6 +52,10 @@
   yet been computed: failed path evidence proposes bounded interval midpoints,
   lowers them to AgentFEM Campaign sampling, and verifies returned parameter
   values before merging new scientific fields.
+- Add `NeuralOperatorCampaignAdapter` so trusted Campaign results become
+  operator-ready field datasets through AgentFEM's common quality gate,
+  provenance transfer and field-shape contract. Initial data and later active
+  acquisitions now share the same declared scientific schema.
 - Add provider-neutral independent-seed field disagreement as an acquisition
   risk signal, while explicitly refusing to present ensemble spread as a
   calibrated physical error bound.

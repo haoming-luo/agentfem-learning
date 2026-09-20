@@ -1,5 +1,6 @@
 """Maintained function-to-function learning providers."""
 
+from .campaign_adapter import NeuralOperatorCampaignAdapter
 from .data_quality import (
     OperatorDatasetAudit,
     audit_operator_dataset,
@@ -24,6 +25,7 @@ from .refinement import (
 )
 
 __all__ = [
+    "NeuralOperatorCampaignAdapter",
     "OperatorDatasetAudit",
     "OperatorEnsembleDisagreement",
     "ParameterPathAcquisitionPlan",

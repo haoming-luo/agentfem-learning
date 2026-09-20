@@ -115,8 +115,11 @@ core `model.step(target=spec, executor=...)` boundary.
   lower directly to AgentFEM `SamplingPlan`, while acquired fields must match
   the plan before merging. Independent-seed field disagreement is available
   as an architecture-neutral candidate risk signal, explicitly not as a
-  calibrated error bar. A project-specific adapter still owns the conversion
-  from successful Campaign fields to its declared scientific dataset schema.
+  calibrated error bar. `NeuralOperatorCampaignAdapter` now binds the declared
+  operator specification to AgentFEM's quality-gated field assembler, so
+  initial Campaigns and later acquisitions share case identity, provenance,
+  field shape and scientific-contract checks. Problem code owns only the
+  scientifically meaningful extraction from one solver outcome.
 - Complete GINO promotion with a real varying-geometry FEM case, independent
   output-query transfer, physics checks, cold installed-
   wheel reload and measured CPU/accelerator resource bounds. Add case-indexed

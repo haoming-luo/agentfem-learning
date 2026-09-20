@@ -5,6 +5,7 @@ import pytest
 from agentfem import campaigns, datasets, learning, verification
 
 from agentfem_learning.neural_operators import (
+    NeuralOperatorCampaignAdapter,
     ParameterPathAcquisitionPlan,
     ParameterPathRefinementPlan,
     apply_parameter_path_refinement,
@@ -185,6 +186,99 @@ def test_high_fidelity_acquisition_must_match_plan_before_dataset_merge():
     wrong = _dataset([0.2, 0.5], prefix="wrong")
     with pytest.raises(ValueError, match="do not match"):
         merge_parameter_path_acquisition(training, wrong, plan)
+
+
+def test_campaign_acquisition_becomes_operator_dataset_without_project_glue(tmp_path):
+    source = learning.FieldEncoding(
+        name="source",
+        role="input",
+        unit="1",
+        representation="point_samples",
+        shape=(1, 2),
+        mesh_policy="registered_mesh_family",
+    )
+    response = learning.FieldEncoding(
+        name="response",
+        role="output",
+        unit="1",
+        representation="point_samples",
+        shape=(1, 2),
+        mesh_policy="registered_mesh_family",
+    )
+    specification = learning.NeuralOperatorSpec(
+        architecture="gino",
+        inputs=(source,),
+        outputs=(response,),
+        boundary_encoding="explicit point coordinates",
+        parameter_inputs=("design",),
+    )
+    space = campaigns.ParameterSpace.create(
+        campaigns.RealParameter("design", 0.0, 1.0)
+    )
+
+    def evaluate(values):
+        return campaigns.CaseOutcome(
+            outputs={"peak": 2.0 * values["design"]},
+            provenance={"solver": "trusted_reference"},
+        )
+
+    campaign = campaigns.create(
+        name="operator_acquisition",
+        parameter_space=space,
+        outputs=(datasets.Quantity("peak"),),
+        evaluate=evaluate,
+    )
+
+    def extract(case, outcome):
+        design = float(case.parameters["design"])
+        values = design * np.ones((1, 2))
+        return datasets.FieldCaseData(
+            fields={"source": values, "response": 2.0 * values},
+            coordinates={
+                "nodes": np.asarray([[0.0, 0.0], [1.0, 0.0]])
+            },
+            metadata={"peak": outcome.outputs["peak"]},
+        )
+
+    adapter = NeuralOperatorCampaignAdapter(
+        specification=specification,
+        extract=extract,
+        coordinate_names=("nodes",),
+        name="campaign_operator_fields",
+    )
+    initial_report = campaign.run(
+        campaigns.explicit(space, ({"design": 0.1}, {"design": 0.9})),
+        output_directory=tmp_path / "initial",
+    )
+    training = adapter.assemble(initial_report)
+
+    plan = ParameterPathAcquisitionPlan(
+        parameter="design",
+        values=(0.3, 0.6),
+        scores=(2.0, 1.0),
+    )
+    acquired_report = campaign.run(
+        plan.sampling_plan(space),
+        output_directory=tmp_path / "acquired",
+    )
+    acquired = adapter.assemble(acquired_report)
+    restored = datasets.ScientificFieldDataset.read(
+        acquired.write(tmp_path / "acquired_fields")
+    )
+    adapter.validate(restored)
+    result = merge_parameter_path_acquisition(training, acquired, plan)
+
+    assert acquired.parameters["design"] == pytest.approx(plan.values)
+    assert acquired.case_metadata[0]["campaign_provenance"]["solver"] == (
+        "trusted_reference"
+    )
+    assert result.training_dataset.case_count == 4
+    assert result.training_dataset.metadata["scientific_contract"] == (
+        adapter.scientific_contract
+    )
+    lineage = result.training_dataset.metadata["dataset_lineage"]
+    assert lineage["base_fingerprint"] == training.fingerprint
+    assert lineage["addition_fingerprint"] == acquired.fingerprint
 
 
 def test_candidate_acquisition_balances_risk_and_distance():
