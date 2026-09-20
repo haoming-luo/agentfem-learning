@@ -46,6 +46,7 @@ class NeuralOperatorCampaignAdapter:
             "kind": "neural_operator_campaign_fields",
             "operator_specification": self.specification.summary(),
             "coordinate_names": self.coordinate_names,
+            "adapter_metadata": self.metadata,
         }
         return _json_safe(record)
 

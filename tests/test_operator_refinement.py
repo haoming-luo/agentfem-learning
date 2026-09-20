@@ -245,6 +245,7 @@ def test_campaign_acquisition_becomes_operator_dataset_without_project_glue(tmp_
         extract=extract,
         coordinate_names=("nodes",),
         name="campaign_operator_fields",
+        metadata={"reference_load": 1.0},
     )
     initial_report = campaign.run(
         campaigns.explicit(space, ({"design": 0.1}, {"design": 0.9})),
@@ -276,6 +277,7 @@ def test_campaign_acquisition_becomes_operator_dataset_without_project_glue(tmp_
     assert result.training_dataset.metadata["scientific_contract"] == (
         adapter.scientific_contract
     )
+    assert adapter.scientific_contract["adapter_metadata"]["reference_load"] == 1.0
     lineage = result.training_dataset.metadata["dataset_lineage"]
     assert lineage["base_fingerprint"] == training.fingerprint
     assert lineage["addition_fingerprint"] == acquired.fingerprint
