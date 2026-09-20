@@ -1,4 +1,4 @@
-"""Official NeuralOperator FNO/TFNO binding for AgentFEM field datasets."""
+"""Official NeuralOperator FNO/TFNO/GINO bindings for AgentFEM field datasets."""
 
 from .api import (
     NeuralOperatorOutcome,
@@ -7,17 +7,45 @@ from .api import (
     load_predictor,
     train_operator,
 )
-from .checks import OperatorCheck, OperatorCheckContext
+from .checks import (
+    OperatorCheck,
+    OperatorCheckContext,
+    ParameterPathAcquisitionPlan,
+    ParameterPathRefinementPlan,
+    parameter_path_acquisition_plan,
+    parameter_path_refinement_plan,
+    parameter_path_reliability_check,
+)
+from .gino import (
+    GINOOutcome,
+    GINOPredictor,
+    GINOTrainingOptions,
+    load_gino_predictor,
+    train_gino,
+)
+from .gino_provider import GINO_PROVIDER, GINOStep
 from .provider import NEURALOPERATOR_PROVIDER, NeuralOperatorStep
 
 __all__ = [
+    "GINO_PROVIDER",
     "NEURALOPERATOR_PROVIDER",
+    "GINOOutcome",
+    "GINOPredictor",
+    "GINOStep",
+    "GINOTrainingOptions",
     "NeuralOperatorOutcome",
     "NeuralOperatorPredictor",
     "NeuralOperatorStep",
     "NeuralOperatorTrainingOptions",
     "OperatorCheck",
     "OperatorCheckContext",
+    "ParameterPathAcquisitionPlan",
+    "ParameterPathRefinementPlan",
+    "load_gino_predictor",
     "load_predictor",
+    "parameter_path_acquisition_plan",
+    "parameter_path_refinement_plan",
+    "parameter_path_reliability_check",
+    "train_gino",
     "train_operator",
 ]

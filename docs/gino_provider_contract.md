@@ -3,7 +3,7 @@
 ## Purpose
 
 The first NeuralOperator provider learns maps on registered structured grids.
-The next geometry-aware provider will use GINO for finite-element families in
+The experimental geometry-aware provider uses GINO for finite-element families in
 which coordinates matter to the operator.  It must not present a padded FNO
 array as support for arbitrary meshes.
 
@@ -32,7 +32,7 @@ Changing any one invalidates cached training and inference artifacts.
 
 ## First supported family
 
-The first implementation should accept registered finite-element families
+The implemented first slice accepts registered finite-element families
 with fixed point count and channel meaning, while coordinates may vary by
 case.  Cases are grouped by an exact geometry fingerprint.  Cases sharing one
 geometry may form a mini-batch; distinct geometries execute as separate
@@ -43,24 +43,65 @@ geometry must be shared within a native batch.  A family containing one
 geometry per case therefore remains correct, but may train with micro-batch
 size one.
 
-The first release must support:
+The first slice supports:
 
 - explicit input coordinates and output query coordinates;
 - one declared latent regular grid;
 - named point fields and scalar case parameters;
 - geometry-aware train, validation and test partitions;
-- held-out geometry and held-out parameter claims as different evidence;
+- held-out geometry evidence distinguished from ordinary held-out field error;
+- output-query transfer isolated on input geometries already present in training;
 - prediction on a new registered geometry without changing field names;
 - exact recording of geometry, neighborhood radii and neighbor-search backend;
 - safe model-state persistence and the ordinary AgentFEM result lifecycle.
+
+The implementation uses the upstream pure-PyTorch neighbor fallback by
+default. Open3D and `torch-scatter` remain disabled until their optional
+dependency combinations pass installed-wheel evidence; selecting them now
+fails before training rather than changing execution silently.
+
+The output GNO may use NeuralOperator's maintained compact-support weighting
+functions through `output_weighting_function`. Supported values are `bump`,
+`half_cos`, `quadr`, `quartic`, and `octic`; `None` preserves the unweighted
+upstream path. The selected function and scale are part of the saved model and
+geometry configuration. They are explicit numerical choices, not an automatic
+accuracy claim.
+
+Every training result also checks point-order semantics. It reverses input
+points, cyclically permutes output queries, restores the output order, and
+records `permutation_equivariance` as an ordinary verification claim. This
+checks a numerical invariant of the coordinate-defined operator; it does not
+replace physical held-out evidence.
+
+## Independent information, not file count
+
+Case count is not treated as independent information count. Before training,
+the provider fingerprints the complete declared operator input: named input
+fields, parameters, input coordinates, and output-query coordinates.
+It reports both the number of files/cases and the number of unique mappings.
+Exact replicas remain visible rather than being silently discarded.
+
+Automatic train/validation splitting is performed on these input-identity
+groups, so replicas of one physical mapping cannot leak into both partitions.
+Explicit validation and test datasets are rejected when they contain an exact
+training-input replica. If one exact declared input maps to materially
+different output labels, training fails and asks for the missing physical
+field or parameter; averaging contradictory supervision would change the
+scientific problem.
+
+The bounded `data_quality` record and result quantities include unique-input
+count, duplicate count/fraction, largest replica group, and the maximum output
+difference among replicas. Thus a dataset containing 90 stored cases but only
+30 independent operator inputs says so explicitly in its evidence.
 
 ## Deliberate rejection boundary
 
 Variable point counts are not represented by padding and a mask merely to
 obtain a rectangular NPZ tensor.  Until a case-indexed ragged storage backend
 exists, such families must fail before training with a specific capability
-message.  Mixed spatial dimensions, changing channel semantics, unlabeled
-coordinate systems and silently reordered nodes also fail closed.
+message.  Mixed spatial dimensions, changing channel semantics and unlabeled
+coordinate systems also fail closed. Reordering invariance is measured rather
+than assumed from the registered-family declaration.
 
 The provider must not claim topology generalization solely because coordinates
 change.  Held-out evidence distinguishes at least:
@@ -69,6 +110,16 @@ change.  Held-out evidence distinguishes at least:
 - a new deformation of a registered topology;
 - a new discretization resolution;
 - a new topology or geometric class.
+
+Aggregate held-out error is not sufficient evidence for a continuous design
+space.  The provider-owned held-out claim accepts against the maximum per-case
+relative L2 error and reports the global, median, 95th-percentile, and
+per-output metrics separately.  A promoted varying-geometry case must also
+evaluate one or more dense, independent parameter paths.  AgentFEM-Learning's
+`parameter_path_reliability_check(...)` reports the worst per-case physical
+field error and rejects isolated interior error spikes even when the global
+error limit still passes.  Training nodes alone do not constitute a path
+audit.
 
 ## Dependency policy
 
@@ -91,7 +142,11 @@ installed wheel:
    requires it;
 6. geometry, boundary or balance checks supplied by the problem adapter;
 7. cold reload reproducing predictions within a declared tolerance;
-8. CPU dependency and memory bounds, plus one accelerated backend smoke test.
+8. CPU dependency and memory bounds, plus one accelerated backend smoke test;
+9. dense parameter-path evidence without an unresolved interior error spike;
+10. point-order permutation evidence recorded in every training result.
+11. independent-input counts, contradiction checks, and leakage-free data
+    partitions recorded in every training result.
 
 ## References
 
@@ -99,4 +154,3 @@ installed wheel:
   <https://neuraloperator.github.io/dev/modules/generated/neuralop.models.GINO.html>
 - Geometry-Informed Neural Operator:
   <https://doi.org/10.48550/arXiv.2309.00583>
-

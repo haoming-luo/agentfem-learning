@@ -88,13 +88,43 @@ core `model.step(target=spec, executor=...)` boundary.
   is rejected through disjoint train/validation/test case identities. The
   flagship heat workflow now generates independent fine-grid FEM cases and
   records their transfer error as a separate verification claim.
-- Bind GINO next for coordinate-defined, geometry-varying finite-element
-  families under the [geometry-informed provider
-  contract](gino_provider_contract.md). Begin with fixed-size registered
-  point sets, group native mini-batches by exact geometry identity, and use
-  gradient-accumulated micro-batches for distinct geometries. Add case-indexed
-  ragged storage before claiming variable point counts; do not force irregular
-  meshes through padding merely to use FNO.
+- **Experimental GINO provider implemented:** coordinate-defined registered
+  mesh families use explicit input geometry, latent grid and output queries.
+  Exact geometry groups form native batches; distinct geometries use
+  gradient-accumulated micro-batches. Geometry transforms, radii, neighbor
+  backend, state and held-out geometry evidence follow the ordinary
+  `SimulationResult` lifecycle.
+- **Continuous parameter-path evidence implemented:** a reusable scientific
+  check now records per-output held-out field errors, the worst parameter
+  location and isolated interpolation spikes along any declared scalar path.
+  The provider-owned held-out claim uses the maximum per-case field error,
+  with aggregate, median, 95th-percentile and per-output diagnostics retained
+  as quantities, so easy geometries cannot conceal a failed held-out case.
+  Every GINO result also carries a deterministic input/output point-permutation
+  claim, rather than leaving point-order independence as a test-only property.
+  Failed path evidence can now be reduced to a bounded, diverse refinement
+  plan for new reference-solver samples. A strict refinement transaction now
+  promotes trusted cases, removes them from validation, preserves a viable
+  independent path, merges compatible field datasets, and records before/after
+  fingerprints. Retraining remains an explicit ordinary Step action.
+  This closes the first evidence-driven refinement loop exposed by the
+  perforated-plate radius audit; it does not by itself promote GINO.
+- **High-fidelity acquisition loop implemented:** failed independent path
+  evidence can now propose new interval-midpoint cases rather than only
+  promoting already computed validation fields. Plans are fingerprinted and
+  lower directly to AgentFEM `SamplingPlan`, while acquired fields must match
+  the plan before merging. Independent-seed field disagreement is available
+  as an architecture-neutral candidate risk signal, explicitly not as a
+  calibrated error bar. `NeuralOperatorCampaignAdapter` now binds the declared
+  operator specification to AgentFEM's quality-gated field assembler, so
+  initial Campaigns and later acquisitions share case identity, provenance,
+  field shape and scientific-contract checks. Problem code owns only the
+  scientifically meaningful extraction from one solver outcome.
+- Complete GINO promotion with a real varying-geometry FEM case, independent
+  output-query transfer, physics checks, cold installed-
+  wheel reload and measured CPU/accelerator resource bounds. Add case-indexed
+  ragged storage before claiming variable point counts; never pad irregular
+  meshes merely to use an operator.
 - Add external PDEBench/The Well adapters only as downloaded benchmark
   contracts; do not bundle their large datasets or make them the user API.
 - Do not route neural operators through `NeuralFieldSpec`: a function-to-

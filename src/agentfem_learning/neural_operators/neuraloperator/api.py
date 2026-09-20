@@ -12,6 +12,14 @@ from pathlib import Path
 import numpy as np
 
 from ...training import TrainingEpoch, TrainingLedger
+from ..data_quality import (
+    OperatorDatasetAudit,
+    audit_operator_dataset,
+    grouped_validation_indices,
+    operator_audit_metrics,
+    require_consistent_operator_labels,
+    require_independent_operator_partitions,
+)
 
 
 @dataclass(frozen=True)
@@ -90,6 +98,7 @@ class NeuralOperatorOutcome:
     input_statistics: _ChannelStatistics
     output_statistics: _ChannelStatistics
     model_configuration: Mapping[str, object]
+    data_quality: Mapping[str, object]
     train_case_ids: tuple[str, ...]
     validation_case_ids: tuple[str, ...]
     validation_dataset: object
@@ -116,6 +125,7 @@ class NeuralOperatorOutcome:
                 # PyTorch's safe ``weights_only`` boundary.
                 "state_dict": tensor_state,
                 "model_configuration": dict(self.model_configuration),
+                "data_quality": dict(self.data_quality),
                 "input_statistics": self.input_statistics.summary(),
                 "output_statistics": self.output_statistics.summary(),
                 "input_names": tuple(dataset.input_names),
@@ -145,6 +155,7 @@ class NeuralOperatorOutcome:
             json.dumps(
                 {
                     "metrics": dict(self.metrics),
+                    "data_quality": dict(self.data_quality),
                     "output_names": tuple(self.predictions),
                     "train_case_ids": self.train_case_ids,
                     "validation_case_ids": self.validation_case_ids,
@@ -266,12 +277,19 @@ def train_operator(
 
     _validate_contract(specification, dataset)
     if validation_dataset is None:
-        split = dataset.split(
+        complete_audit = _audit_structured_dataset(specification, dataset)
+        require_consistent_operator_labels(
+            complete_audit, partition="dataset", provider="FNO/TFNO"
+        )
+        training_indices, validation_indices = grouped_validation_indices(
+            complete_audit.input_fingerprints,
             validation_fraction=options.validation_fraction,
             seed=options.seed,
         )
-        training = split.train
-        validation = split.validation
+        training = dataset.subset(training_indices, name=f"{dataset.name}_train")
+        validation = dataset.subset(
+            validation_indices, name=f"{dataset.name}_validation"
+        )
     else:
         training = dataset
         validation = validation_dataset
@@ -279,6 +297,33 @@ def train_operator(
     if test_dataset is not None:
         _validate_contract(specification, test_dataset, allow_resolution_change=True)
     _require_disjoint_case_ids(training, validation, test_dataset)
+
+    training_audit = _audit_structured_dataset(specification, training)
+    validation_audit = _audit_structured_dataset(specification, validation)
+    require_consistent_operator_labels(
+        training_audit, partition="training", provider="FNO/TFNO"
+    )
+    require_consistent_operator_labels(
+        validation_audit, partition="validation", provider="FNO/TFNO"
+    )
+    require_independent_operator_partitions(
+        training_audit,
+        validation_audit,
+        right_name="validation",
+        provider="FNO/TFNO",
+    )
+    test_audit = None
+    if test_dataset is not None:
+        test_audit = _audit_structured_dataset(specification, test_dataset)
+        require_consistent_operator_labels(
+            test_audit, partition="test", provider="FNO/TFNO"
+        )
+        require_independent_operator_partitions(
+            training_audit,
+            test_audit,
+            right_name="test",
+            provider="FNO/TFNO",
+        )
 
     device = _resolve_device(options.device, torch)
     dtype = torch.float64 if options.dtype == "float64" else torch.float32
@@ -424,10 +469,21 @@ def train_operator(
         metrics.update(test_metrics)
         test_case_ids = test_dataset.case_ids
         resolution_transfer = any(
-            test_dataset.fields[name].shape[2:]
-            != training.fields[name].shape[2:]
+            test_dataset.fields[name].shape[2:] != training.fields[name].shape[2:]
             for name in (*training.input_names, *training.output_names)
         )
+    metrics.update(operator_audit_metrics("training", training_audit))
+    metrics.update(operator_audit_metrics("validation", validation_audit))
+    if test_audit is not None:
+        metrics.update(operator_audit_metrics("test", test_audit))
+    data_quality = {
+        "identity": "declared input fields + parameters + structured coordinates",
+        "partition_policy": "exact_input_groups_are_partition_atomic",
+        "conflict_tolerance": 1.0e-10,
+        "training": training_audit.summary(),
+        "validation": validation_audit.summary(),
+        "test": None if test_audit is None else test_audit.summary(),
+    }
     return NeuralOperatorOutcome(
         model=model,
         ledger=ledger,
@@ -437,6 +493,7 @@ def train_operator(
         input_statistics=input_statistics,
         output_statistics=output_statistics,
         model_configuration=configuration,
+        data_quality=data_quality,
         train_case_ids=training.case_ids,
         validation_case_ids=validation.case_ids,
         validation_dataset=validation,
@@ -459,6 +516,10 @@ def load_predictor(path: str | Path, *, device: str = "cpu") -> NeuralOperatorPr
     selected_device = _resolve_device(device, torch)
     record = torch.load(Path(path), map_location=selected_device, weights_only=True)
     configuration = dict(record["model_configuration"])
+    if configuration.get("architecture") == "gino":
+        from .gino import load_gino_predictor
+
+        return load_gino_predictor(path, device=device)
     architecture = configuration.pop("architecture")
     dtype_name = configuration.pop("dtype", "float32")
     dtype = torch.float64 if dtype_name == "float64" else torch.float32
@@ -589,6 +650,34 @@ def _matrices(specification, dataset) -> tuple[np.ndarray, np.ndarray]:
             axis=1,
         )
     return input_values, np.concatenate(outputs, axis=1)
+
+
+def _audit_structured_dataset(specification, dataset) -> OperatorDatasetAudit:
+    inputs = {
+        f"field:{item.name}": np.asarray(dataset.fields[item.name])
+        for item in specification.inputs
+    }
+    inputs.update(
+        {
+            f"parameter:{name}": np.asarray(dataset.parameters[name])
+            for name in specification.parameter_inputs
+        }
+    )
+    inputs.update(
+        {
+            f"coordinate:{name}": np.asarray(values)
+            for name, values in dataset.coordinates.items()
+        }
+    )
+    outputs = {
+        f"field:{item.name}": np.asarray(dataset.fields[item.name])
+        for item in specification.outputs
+    }
+    return audit_operator_dataset(
+        inputs=inputs,
+        outputs=outputs,
+        case_ids=dataset.case_ids,
+    )
 
 
 def _parameter_channels(

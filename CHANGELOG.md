@@ -17,9 +17,48 @@
 - Add named, source-fingerprinted `OperatorCheck` evaluators, reject case-ID
   overlap between data partitions, and distinguish genuine spatial-resolution
   transfer from another held-out dataset on the training grid.
-- Define the GINO provider boundary: geometry-identity batching, explicit
-  coordinate roles, separate geometry-transfer evidence, and fail-closed
-  handling of variable-size families until ragged scientific storage exists.
+- Implement the official NeuralOperator GINO provider with distinct input,
+  latent and output geometries; exact-geometry native batches; cross-geometry
+  gradient accumulation; training-fitted coordinate transforms; graph-neighbor
+  coverage checks; safe reload; and separate geometry- and output-query-transfer
+  evidence.
+- Add a real varying-width AgentFEM heat-transfer example. Keep new topology,
+  ragged point families and optional accelerated neighbor backends outside the
+  first validated boundary.
+- Add a provider-neutral parameter-path reliability check for geometry and
+  other scalar design paths. It records per-output held-out field error,
+  worst-case identity and isolated interpolation spikes as ordinary AgentFEM
+  verification evidence.
+- Make the GINO held-out claim depend on the maximum per-case physical-field
+  error and add aggregate, median, 95th-percentile, and per-output metrics.
+- Record deterministic input-point and output-query permutation equivariance
+  as a provider-owned verification claim in every GINO result.
+- Expose NeuralOperator's maintained compact-support output-GNO weighting
+  functions with validated, persisted provider options.
+- Add evidence-driven parameter-path refinement plans that select a bounded,
+  diverse set of high-risk cases for new trusted-solver evaluations.
+- Audit the independent information content of FNO, TFNO and GINO datasets,
+  preserve exact replicas as visible evidence, reject contradictory duplicate
+  labels, and keep repeated physical inputs atomic during automatic
+  partitioning so they cannot leak from training into validation.
+- Attach the resulting independent-input and label-consistency audit as an
+  `operator_dataset_integrity` verification claim to every maintained neural
+  operator result.
+- Add an auditable parameter-path refinement transaction: trusted failed-path
+  cases move into training, leave the validation path, preserve a minimum
+  independent audit set, and retain before/after dataset fingerprints before
+  the ordinary provider retrains the model.
+- Add a distinct high-fidelity acquisition transaction for cases that have not
+  yet been computed: failed path evidence proposes bounded interval midpoints,
+  lowers them to AgentFEM Campaign sampling, and verifies returned parameter
+  values before merging new scientific fields.
+- Add `NeuralOperatorCampaignAdapter` so trusted Campaign results become
+  operator-ready field datasets through AgentFEM's common quality gate,
+  provenance transfer and field-shape contract. Initial data and later active
+  acquisitions now share the same declared scientific schema.
+- Add provider-neutral independent-seed field disagreement as an acquisition
+  risk signal, while explicitly refusing to present ensemble spread as a
+  calibrated physical error bound.
 
 - Add the independent AgentFEM extension entry point.
 - Add a provider-neutral Mode-III `NeuralFieldSpec`.

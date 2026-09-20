@@ -13,14 +13,14 @@ FEM cases -> ScientificFieldDataset -> NeuralOperatorSpec
 
 AgentFEM core owns field meaning, units, geometry policy, case identity,
 partitions, provenance and result evidence. AgentFEM-Learning owns maintained
-framework bindings and training execution. NeuralOperator owns the FNO/TFNO
-architecture and spectral layers. A laboratory-owned model may consume the
+framework bindings and training execution. NeuralOperator owns the
+FNO/TFNO/GINO architectures and numerical layers. A laboratory-owned model may consume the
 same core contracts without using this companion.
 
 ## Current provider
 
-`agentfem-learning.neuraloperator` currently supports FNO and TFNO on fixed,
-structured observation grids. Every field uses the explicit layout
+`agentfem-learning.neuraloperator` supports FNO and TFNO on fixed, structured
+observation grids. Every field uses the explicit layout
 `(case, channel, spatial...)`. Scalar case parameters may be declared in
 `NeuralOperatorSpec.parameter_inputs`; the provider broadcasts them as
 constant channels while preserving their named dataset record.
@@ -76,6 +76,87 @@ The model artifact is loaded with PyTorch's restricted `weights_only` path.
 Provider configuration and scientific metadata are primitive records rather
 than a pickled live Python model.
 
+## Geometry-informed operator
+
+The experimental GINO route learns one operator across a registered family of
+coordinate-defined finite-element fields. Its public data layout is
+`(case, channel, point)` plus coordinate arrays `(case, point, dimension)`:
+
+```python
+operator_spec = learning.NeuralOperatorSpec(
+    architecture="gino",
+    inputs=(load_encoding,),
+    outputs=(response_encoding,),
+    boundary_encoding="explicit point coordinates",
+    required_checks=(
+        "held_out_field_error",
+        "geometry_transfer",
+        "output_query_transfer",
+    ),
+)
+
+result = model.step(
+    target=operator_spec,
+    dataset=training_dataset,
+    validation_dataset=validation_dataset,
+    test_dataset=unseen_geometry_dataset,
+    input_geometry="nodes",
+    coordinate_system="cartesian",
+    coordinate_unit="m",
+    latent_shape=(16, 16),
+    n_modes=(8, 8),
+    input_radius=0.25,
+    output_radius=0.25,
+).solve_result()
+```
+
+`input_geometry`, the regular `latent_shape`, and optional `output_queries`
+have different meanings and remain separate. Physical coordinates are mapped
+to one training-fitted unit box; the transform, units, neighborhood radii and
+backend are stored with the model. The default `native` neighbor backend is a
+reviewed PyTorch fallback and does not require Open3D or `torch-scatter`.
+
+NeuralOperator currently requires every native batch to share geometry. The
+provider therefore groups exact geometry fingerprints, uses ordinary batches
+inside a group, and accumulates gradients across distinct-geometry
+micro-batches. Every case still carries its own geometry identity and no case
+is padded.
+
+Stored case count and independent operator-input count are reported
+separately. The latter fingerprints input fields, declared parameters, input
+geometry, and output queries together. Automatic validation splitting keeps
+all exact replicas in one partition; explicit partitions with training-input
+leakage and duplicate inputs with contradictory outputs fail before training.
+This makes replicated files visible without letting them inflate validation
+evidence.
+
+Every maintained NeuralOperator result carries an
+`operator_dataset_integrity` verification claim. It records the independent
+input count and confirms that contradictory deterministic labels and exact
+training-input replicas in evidence partitions were rejected before
+optimization.
+
+```python
+from agentfem_learning.neural_operators.neuraloperator import load_predictor
+
+predictor = load_predictor("outputs/gino/operator_state.pt")
+fields = predictor.predict(
+    {"load": load_on_new_geometry},
+    input_geometry=new_nodes,
+    output_queries=query_points,
+)
+```
+
+The first provider deliberately requires `registered_mesh_family` field
+semantics and rejects padded or masked point clouds. It supports different
+coordinates across cases, but does not claim unseen topology generalization,
+ragged per-case point counts, or physical validity from training loss alone.
+`geometry_transfer` is emitted only for exact geometries absent from training;
+its stated domain is registered topology deformation. A changed independent
+output query set is reported separately as `output_query_transfer` only when
+the corresponding input geometry occurred in training. Thus a finer query grid
+is neither mislabeled as a new physical geometry nor confounded with one.
+
 ## Evidence is not inferred from loss
 
 The generic provider can compute held-out field error. Boundary error,
@@ -106,15 +187,158 @@ test dataset actually changes the spatial resolution. Supplying another
 dataset on the training resolution remains ordinary held-out testing and does
 not satisfy that check.
 
-FNO/TFNO is therefore the first structured-grid route, not a universal finite
-operator. Geometry-varying and unstructured finite-element families should
-use coordinate-aware operators. The next maintained target is GINO, whose
-official formulation maps between arbitrary coordinate meshes and latent
-regular grids. Its implementation boundary is defined in the
-[geometry-informed provider contract](gino_provider_contract.md): the first
-release will group cases by geometry identity and will reject variable-size
-families until case-indexed ragged storage exists. It will not disguise an
-irregular mesh as a padded FNO tensor.
+Geometry operators also need evidence between the chosen training nodes.  A
+small mean validation error can hide one severe interpolation failure inside
+the parameter domain.  The reusable parameter-path check consumes an
+independent, ordered validation slice and records both the worst physical-field
+error and isolated interior error spikes:
+
+```python
+from agentfem_learning.neural_operators.neuraloperator import (
+    parameter_path_reliability_check,
+)
+
+path_check = parameter_path_reliability_check(
+    "hole_radius",
+    output_tolerances={"displacement": 0.08, "von_mises_stress": 0.15},
+    maximum_spike_ratio=2.5,
+)
+
+result = model.step(
+    target=operator_spec,
+    dataset=training_dataset,
+    validation_dataset=independent_radius_path,
+    check_evaluators=(path_check,),
+).solve_result()
+```
+
+The path must contain at least three distinct parameter values and independent
+reference fields.  The resulting claim identifies the worst case and spike
+location; it does not infer continuity from optimizer loss or from distance to
+the nearest training point.
+
+GINO's provider-owned `held_out_field_error` is conservative as well: its
+acceptance value is the maximum per-case relative L2 error.  The global,
+median-case, 95th-percentile, and per-output errors remain available as result
+quantities, so many easy geometries cannot hide one failed held-out geometry.
+
+For geometry paths that are sensitive to the hard output-neighborhood cutoff,
+the provider exposes the compact-support kernels maintained by NeuralOperator:
+
+```python
+model.step(
+    target=operator_spec,
+    dataset=training_dataset,
+    output_weighting_function="half_cos",
+    output_weighting_scale=1.0,
+)
+```
+
+This changes only the output GNO quadrature weighting. It must be selected by
+held-out and path evidence; AgentFEM-Learning does not silently change the
+architecture after seeing validation results.
+
+When a path fails, the same evidence can produce a bounded simulator-sampling
+plan:
+
+```python
+from agentfem_learning.neural_operators.neuraloperator import (
+    parameter_path_refinement_plan,
+)
+from agentfem_learning.neural_operators import apply_parameter_path_refinement
+
+plan = parameter_path_refinement_plan(
+    path_claim,
+    existing_values=training_dataset.parameters["hole_radius"],
+    maximum_candidates=3,
+)
+
+refinement = apply_parameter_path_refinement(
+    training_dataset,
+    independent_path_dataset,
+    plan,
+)
+
+result = model.step(
+    target=operator_spec,
+    dataset=refinement.training_dataset,
+    validation_dataset=refinement.validation_dataset,
+    check_evaluators=(path_check,),
+).solve_result()
+```
+
+The plan balances measured field risk with distance from existing samples. It
+does not synthesize labels. `apply_parameter_path_refinement(...)` promotes
+only cases that already carry trusted reference fields, removes them from the
+validation path before merging, preserves at least three independent path
+points, and records before/after dataset fingerprints. Values not yet computed
+must first be evaluated with AgentFEM or another declared reference solver;
+their dataset can enter through `merge_operator_datasets(...)`. Retraining
+remains the ordinary `model.step(...)` workflow rather than a second hidden
+trainer.
+
+For genuinely new cases, keep acquisition separate from promotion:
+
+```python
+from agentfem import campaigns, datasets
+from agentfem_learning.neural_operators import (
+    NeuralOperatorCampaignAdapter,
+    merge_parameter_path_acquisition,
+)
+from agentfem_learning.neural_operators.neuraloperator import (
+    parameter_path_acquisition_plan,
+)
+
+acquisition = parameter_path_acquisition_plan(
+    path_claim,
+    existing_values=training_dataset.parameters["hole_radius"],
+    maximum_candidates=2,
+)
+space = campaigns.ParameterSpace.create(
+    campaigns.RealParameter("hole_radius", 0.10, 0.25, unit="m")
+)
+sampling = acquisition.sampling_plan(space)
+
+report = campaign.run(sampling, output_directory="outputs/acquisition")
+
+adapter = NeuralOperatorCampaignAdapter(
+    specification=operator_spec,
+    coordinate_names=("nodes", "queries"),
+    extract=lambda case, outcome: datasets.FieldCaseData(
+        fields=read_fields(outcome.artifacts),
+        coordinates=read_coordinates(outcome.artifacts),
+    ),
+)
+acquired_dataset = adapter.assemble(report, quality="engineering")
+
+merged = merge_parameter_path_acquisition(
+    training_dataset,
+    acquired_dataset,
+    acquisition,
+)
+```
+
+The acquisition plan inserts high-risk interval midpoints rather than
+relabelling predictions as truth. It lowers to AgentFEM's existing explicit
+`SamplingPlan`, so case identity, resume, execution evidence and failure
+handling remain owned by Campaign. The returned field dataset must match every
+requested parameter value before it can be merged. The problem adapter still
+declares how one solver artifact becomes physical fields; it no longer owns
+case iteration, quality gating, array stacking, provenance transfer, or the
+operator-schema check. Initial training campaigns and later acquisitions use
+the same adapter and therefore the same scientific contract.
+
+Independent-seed predictions can also be reduced to a provider-neutral risk
+signal with `operator_ensemble_disagreement(...)`. It reports normalized
+per-case field disagreement and can rank an unlabelled candidate pool through
+`parameter_candidate_acquisition_plan(...)`. This is deliberately an
+epistemic-disagreement proxy, not a calibrated uncertainty interval: small
+ensemble spread does not prove that a field is physically accurate.
+
+FNO/TFNO remains the structured-grid route rather than a universal finite
+operator. GINO is the coordinate-aware route under the
+[geometry-informed provider contract](gino_provider_contract.md). Both remain
+experimental until their independent promotion evidence is complete.
 
 ## Storage progression
 
@@ -132,6 +356,12 @@ not alter field semantics or trainer code.
   <https://doi.org/10.48550/arXiv.2010.08895>
 - Geometry-Informed Neural Operator:
   <https://doi.org/10.48550/arXiv.2309.00583>
+- Deep ensembles for predictive uncertainty:
+  <https://proceedings.neurips.cc/paper/2017/hash/9ef2ed4b7fd2c810847ffa5fa85bce38-Abstract.html>
+- Multi-resolution active learning of Fourier neural operators:
+  <https://proceedings.mlr.press/v238/li24k.html>
+- Active learning with selective PDE time-step acquisition:
+  <https://proceedings.mlr.press/v267/kim25m.html>
 - Zarr chunked array specification: <https://zarr.dev/>
 - PDEBench: <https://github.com/pdebench/PDEBench>
 - The Well: <https://github.com/PolymathicAI/the_well>
