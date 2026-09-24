@@ -26,11 +26,19 @@ dependencies = [
 [project.optional-dependencies]
 xdem = ["torch>=2.0,<3"]
 neuraloperator = ["torch>=2.0,<3", "neuraloperator>=2.0,<3"]
-test = ["pytest>=8", "ruff>=0.9", "torch>=2.0,<3", "neuraloperator>=2.0,<3"]
+constitutive = ["torch>=2.0,<3", "safetensors>=0.4,<1"]
+test = [
+  "pytest>=8",
+  "ruff>=0.9",
+  "torch>=2.0,<3",
+  "safetensors>=0.4,<1",
+  "neuraloperator>=2.0,<3",
+]
 
 [project.entry-points."agentfem.extensions"]
 "agentfem-learning.xdem" = "agentfem_learning.neural_fields.xdem.extension:extension"
 "agentfem-learning.neuraloperator" = "agentfem_learning.neural_operators.neuraloperator.extension:extension"
+"agentfem-learning.learned-constitutive" = "agentfem_learning.learned_constitutive.extension:extension"
 
 [project.urls]
 Homepage = "https://github.com/haoming-luo/agentfem-learning"
