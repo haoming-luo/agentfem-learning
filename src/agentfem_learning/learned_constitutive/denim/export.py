@@ -9,7 +9,11 @@ import json
 from hashlib import sha256
 from pathlib import Path
 
-from ..artifacts import file_sha256
+from ..artifacts import (
+    MODEL_BUNDLE_SCHEMA,
+    MODEL_BUNDLE_SCHEMA_VERSION,
+    file_sha256,
+)
 from ..torch_runtime import require_torch
 
 
@@ -24,7 +28,8 @@ def denim_manifest(
     dataset_revision: str | None = None,
 ) -> dict[str, object]:
     return {
-        "schema_version": "1.0.0",
+        "schema": MODEL_BUNDLE_SCHEMA,
+        "schema_version": MODEL_BUNDLE_SCHEMA_VERSION,
         "model_name": model_name,
         "model_version": model_version,
         "model_revision": model_revision,
@@ -131,7 +136,9 @@ def convert_legacy_checkpoint(
         dataset_id=dataset_id,
         dataset_revision=dataset_revision,
     )
-    manifest["training_metadata"]["parameter_count"] = sum(value.numel() for value in tensors.values())
+    manifest["training_metadata"]["parameter_count"] = sum(
+        value.numel() for value in tensors.values()
+    )
     encoded = json.dumps(manifest, indent=2, sort_keys=True) + "\n"
     (target / "model.json").write_text(encoded, encoding="utf-8")
     readme = (

@@ -1,4 +1,4 @@
-# DENIM material-point example
+# DENIM learned-constitutive examples
 
 Prepare a local bundle as described in
 [`docs/learned_constitutive.md`](../../docs/learned_constitutive.md), then run:

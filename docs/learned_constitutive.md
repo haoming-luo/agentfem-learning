@@ -14,6 +14,19 @@ LearnedConstitutiveSpec
   -> AgentFEM quadrature transaction
 ```
 
+One explicit activation makes the provider available to the ordinary
+AgentFEM material and Step workflow:
+
+```python
+from agentfem import extensions, materials
+
+extensions.load_extension("agentfem-learning.learned-constitutive")
+material = materials.learned(spec)
+```
+
+`spec` is an AgentFEM `LearnedConstitutiveSpec`; it remains independent of
+PyTorch and may be serialized before this optional package is installed.
+
 Every bundle contains:
 
 ```text
@@ -22,6 +35,9 @@ weights.safetensors
 SHA256SUMS
 README.md
 ```
+
+The manifest uses `agentfem.learned_constitutive.bundle` version `1.0.0`.
+Unknown schemas, versions, weights, or checksums fail before inference.
 
 `model.json` declares kinematics, stress/tangent conventions, named
 parameters, versioned state layout, required inputs, capabilities, dtype
@@ -70,8 +86,8 @@ checkpoint.
 - direct rank-local batch inference;
 - fixed-old-state automatic-differentiation tangent;
 - separate elastic, isotropic-hardening, kinematic-hardening, plastic-work,
-  and modeled-dissipation channels plus yield, incompressibility, PEEQ, finite-state, and
-  applicability diagnostics;
+  and modeled-dissipation channels plus yield, incompressibility, PEEQ,
+  finite-state, and applicability diagnostics;
 - no network access and no silent high-fidelity fallback.
 
 The fixed 121-step reference path after bundle migration gives approximately

@@ -9,7 +9,12 @@ from dataclasses import dataclass
 
 
 class TorchRuntimeUnavailable(RuntimeError):
-    pass
+    """The explicitly requested Torch runtime cannot be provided."""
+
+    code = "AFM-LEARNING-RUNTIME-001"
+
+    def __init__(self, message: str):
+        super().__init__(f"{self.code}: {message}")
 
 
 def require_torch():
@@ -17,8 +22,7 @@ def require_torch():
         import torch
     except ImportError as exc:
         raise TorchRuntimeUnavailable(
-            "PyTorch is required for this provider. Install "
-            "agentfem-learning[constitutive]."
+            "PyTorch is required for this provider. Install agentfem-learning[constitutive]."
         ) from exc
     return torch
 
@@ -47,6 +51,8 @@ class TorchRuntime:
             "device": str(device),
             "dtype": str(dtype).removeprefix("torch."),
         }
+
+    as_dict = summary
 
 
 __all__ = ["TorchRuntime", "TorchRuntimeUnavailable", "require_torch"]

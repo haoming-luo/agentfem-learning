@@ -66,7 +66,9 @@ class DenimMaterial:
         values = []
         for name in ("young", "poisson", "yield_stress"):
             selected = _required_parameter(request.parameters, name)
-            values.append(torch.full((count,), selected, dtype=self._dtype, device=self._device))
+            values.append(
+                torch.full((count,), selected, dtype=self._dtype, device=self._device)
+            )
         if torch.any(values[0] <= 0) or torch.any((values[1] <= -1) | (values[1] >= 0.5)):
             raise ValueError("DENIM requires young > 0 and -1 < poisson < 0.5.")
         if torch.any(values[2] <= 0):
@@ -154,9 +156,7 @@ class DenimMaterial:
             )
             moduli = self.law.moduli(yield_stress)
             kinematic_energy = (
-                3.0
-                * double_contract(new_state.memories, new_state.memories)
-                / (4.0 * moduli)
+                3.0 * double_contract(new_state.memories, new_state.memories) / (4.0 * moduli)
             ).sum(dim=-1)
             plastic_work = double_contract(
                 stress,
@@ -164,11 +164,11 @@ class DenimMaterial:
             )
             old_isotropic = self.law.isotropic.stored_energy(old_state.peeq, yield_stress)
             old_kinematic = (
-                3.0
-                * double_contract(old_state.memories, old_state.memories)
-                / (4.0 * moduli)
+                3.0 * double_contract(old_state.memories, old_state.memories) / (4.0 * moduli)
             ).sum(dim=-1)
-            hardening_change = isotropic_energy + kinematic_energy - old_isotropic - old_kinematic
+            hardening_change = (
+                isotropic_energy + kinematic_energy - old_isotropic - old_kinematic
+            )
             dissipation = torch.clamp(plastic_work - hardening_change, min=0.0)
             yield_residual = diagnostics["yield_residual"]
             finite = torch.isfinite(packed_new).all(dim=1) & torch.isfinite(stress).all(dim=1)
@@ -191,7 +191,9 @@ class DenimMaterial:
             state_new=state_np,
             tangent_convention=self.tangent_convention,
             state_schema=self.state_schema,
-            stored_energy_density=(elastic_energy + isotropic_energy + kinematic_energy).cpu().numpy(),
+            stored_energy_density=(elastic_energy + isotropic_energy + kinematic_energy)
+            .cpu()
+            .numpy(),
             dissipated_energy_density=dissipation.cpu().numpy(),
             suggested_time_scale=np.ones(count),
             applicability_status=tuple(statuses),
@@ -241,7 +243,13 @@ class DenimMaterial:
             state_schema=self.state_schema,
             stored_energy_density=float(response.stored_energy_density[0]),
             dissipated_energy_density=float(response.dissipated_energy_density[0]),
-            diagnostics={name: values[0].item() for name, values in response.diagnostics.items()},
+            energy_density_components={
+                name: float(values[0])
+                for name, values in response.energy_density_components.items()
+            },
+            diagnostics={
+                name: values[0].item() for name, values in response.diagnostics.items()
+            },
             suggested_time_scale=float(response.suggested_time_scale[0]),
             applicability_status=response.applicability_status[0],
         )

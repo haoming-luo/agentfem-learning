@@ -10,6 +10,15 @@ from collections.abc import Callable
 _ARCHITECTURES: dict[str, Callable] = {}
 
 
+class ArchitectureRegistryError(LookupError):
+    """A requested learned-material architecture is not registered."""
+
+    code = "AFM-LEARNING-ARCHITECTURE-001"
+
+    def __init__(self, message: str):
+        super().__init__(f"{self.code}: {message}")
+
+
 def register_architecture(
     architecture_id: str,
     loader: Callable,
@@ -29,7 +38,7 @@ def architecture_loader(architecture_id: str) -> Callable:
     try:
         return _ARCHITECTURES[selected]
     except KeyError as exc:
-        raise LookupError(
+        raise ArchitectureRegistryError(
             f"No learned-constitutive architecture loader for {selected!r}; "
             f"available={registered_architectures()!r}."
         ) from exc
@@ -39,4 +48,9 @@ def registered_architectures() -> tuple[str, ...]:
     return tuple(sorted(_ARCHITECTURES))
 
 
-__all__ = ["architecture_loader", "register_architecture", "registered_architectures"]
+__all__ = [
+    "ArchitectureRegistryError",
+    "architecture_loader",
+    "register_architecture",
+    "registered_architectures",
+]

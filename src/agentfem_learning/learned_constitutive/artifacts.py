@@ -14,10 +14,25 @@ from pathlib import Path
 from types import MappingProxyType
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+MODEL_BUNDLE_SCHEMA = "agentfem.learned_constitutive.bundle"
+MODEL_BUNDLE_SCHEMA_VERSION = "1.0.0"
 
 
 class ModelBundleError(RuntimeError):
     """A local model bundle is missing, corrupt, or incompatible."""
+
+    code = "AFM-LEARNING-BUNDLE-001"
+
+    def __init__(self, message: str):
+        super().__init__(f"{self.code}: {message}")
+
+
+def _freeze_json(value):
+    if isinstance(value, Mapping):
+        return MappingProxyType({str(key): _freeze_json(item) for key, item in value.items()})
+    if isinstance(value, list):
+        return tuple(_freeze_json(item) for item in value)
+    return value
 
 
 def file_sha256(path: Path) -> str:
@@ -53,6 +68,8 @@ class ModelBundle:
     def summary(self) -> dict[str, object]:
         return {
             "kind": "learned_constitutive_model_bundle",
+            "schema": self.manifest["schema"],
+            "schema_version": self.manifest["schema_version"],
             "model_name": self.model_name,
             "model_version": self.model_version,
             "architecture_id": self.architecture_id,
@@ -62,6 +79,8 @@ class ModelBundle:
             "dataset_id": self.manifest.get("dataset_id"),
             "dataset_revision": self.manifest.get("dataset_revision"),
         }
+
+    as_dict = summary
 
 
 def load_model_bundle(path) -> ModelBundle:
@@ -86,6 +105,7 @@ def load_model_bundle(path) -> ModelBundle:
     if not isinstance(manifest, dict):
         raise ModelBundleError("model.json must contain one JSON object.")
     required = {
+        "schema",
         "schema_version",
         "model_name",
         "model_version",
@@ -108,6 +128,14 @@ def load_model_bundle(path) -> ModelBundle:
     missing = sorted(required - set(manifest))
     if missing:
         raise ModelBundleError(f"Model manifest is missing {missing!r}.")
+    if manifest["schema"] != MODEL_BUNDLE_SCHEMA:
+        raise ModelBundleError(f"Unsupported model bundle schema {manifest['schema']!r}.")
+    if manifest["schema_version"] != MODEL_BUNDLE_SCHEMA_VERSION:
+        raise ModelBundleError(
+            "Unsupported model bundle schema version "
+            f"{manifest['schema_version']!r}; expected "
+            f"{MODEL_BUNDLE_SCHEMA_VERSION!r}."
+        )
     if manifest["weights_format"] != "safetensors":
         raise ModelBundleError(
             "Runtime bundles require safetensors; migrate trusted legacy checkpoints first."
@@ -145,11 +173,18 @@ def load_model_bundle(path) -> ModelBundle:
             raise ModelBundleError(f"SHA256SUMS does not authenticate {name}.")
     return ModelBundle(
         root=root,
-        manifest=MappingProxyType(manifest),
+        manifest=_freeze_json(manifest),
         manifest_sha256=sha256(encoded).hexdigest(),
         weights_path=weights_path,
         weights_sha256=actual,
     )
 
 
-__all__ = ["ModelBundle", "ModelBundleError", "file_sha256", "load_model_bundle"]
+__all__ = [
+    "MODEL_BUNDLE_SCHEMA",
+    "MODEL_BUNDLE_SCHEMA_VERSION",
+    "ModelBundle",
+    "ModelBundleError",
+    "file_sha256",
+    "load_model_bundle",
+]

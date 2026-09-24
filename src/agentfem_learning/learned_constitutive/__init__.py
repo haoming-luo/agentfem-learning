@@ -3,12 +3,25 @@
 
 """Optional learned-constitutive runtimes for AgentFEM."""
 
-from .artifacts import ModelBundle, ModelBundleError, load_model_bundle
+from .artifacts import (
+    MODEL_BUNDLE_SCHEMA,
+    MODEL_BUNDLE_SCHEMA_VERSION,
+    ModelBundle,
+    ModelBundleError,
+    load_model_bundle,
+)
 from .provider import TORCH_CONSTITUTIVE_PROVIDER, TorchConstitutiveProvider
-from .registry import register_architecture, registered_architectures
+from .registry import (
+    ArchitectureRegistryError,
+    register_architecture,
+    registered_architectures,
+)
 
 __all__ = [
+    "MODEL_BUNDLE_SCHEMA",
+    "MODEL_BUNDLE_SCHEMA_VERSION",
     "TORCH_CONSTITUTIVE_PROVIDER",
+    "ArchitectureRegistryError",
     "ModelBundle",
     "ModelBundleError",
     "TorchConstitutiveProvider",

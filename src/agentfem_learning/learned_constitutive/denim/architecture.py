@@ -152,19 +152,33 @@ class NeuralHardeningLaw(nn.Module):
         current_norm = torch.sqrt(
             torch.clamp(double_contract(flow_direction, flow_direction), min=tiny)
         )
-        reversal = double_contract(state.previous_flow, flow_direction) / (old_norm * current_norm).clamp_min(1.0e-12)
-        recovery = self.recovery(state.peeq, isotropic, flow_direction, state.memories, stress_scale, reversal)
+        reversal = double_contract(state.previous_flow, flow_direction) / (
+            old_norm * current_norm
+        ).clamp_min(1.0e-12)
+        recovery = self.recovery(
+            state.peeq, isotropic, flow_direction, state.memories, stress_scale, reversal
+        )
         moduli = self.moduli(stress_scale)
-        numerator = state.memories + (2.0 / 3.0) * moduli[..., :, None] * increment[..., None, None] * flow_direction[..., None, :]
+        numerator = (
+            state.memories
+            + (2.0 / 3.0)
+            * moduli[..., :, None]
+            * increment[..., None, None]
+            * flow_direction[..., None, :]
+        )
         denominator = 1.0 + recovery * increment[..., None]
         return numerator / denominator[..., None], recovery, moduli
 
 
-def _candidate_update(trial_deviatoric, state, increment, shear, yield_stress, law, *, direction_iterations):
+def _candidate_update(
+    trial_deviatoric, state, increment, shear, yield_stress, law, *, direction_iterations
+):
     shifted = trial_deviatoric - state.backstress
     direction = 1.5 * shifted / von_mises(shifted).clamp_min(1.0)[..., None]
     for _ in range(direction_iterations):
-        memories, recovery, moduli = law.update_memories(state, direction, increment, yield_stress)
+        memories, recovery, moduli = law.update_memories(
+            state, direction, increment, yield_stress
+        )
         denominator = 1.0 + recovery * increment[..., None]
         effective = trial_deviatoric - (state.memories / denominator[..., None]).sum(-2)
         direction = 1.5 * effective / von_mises(effective).clamp_min(1.0)[..., None]
@@ -173,10 +187,26 @@ def _candidate_update(trial_deviatoric, state, increment, shear, yield_stress, l
     effective = trial_deviatoric - (state.memories / denominator[..., None]).sum(-2)
     radius = yield_stress + law.isotropic(state.peeq + increment, yield_stress)
     modulus = 3.0 * shear + (moduli / denominator).sum(-1)
-    return von_mises(effective) - modulus * increment - radius, direction, memories, recovery, moduli
+    return (
+        von_mises(effective) - modulus * increment - radius,
+        direction,
+        memories,
+        recovery,
+        moduli,
+    )
 
 
-def advance(strain, state, young, poisson, yield_stress, law, *, bisection_iterations=28, direction_iterations=6):
+def advance(
+    strain,
+    state,
+    young,
+    poisson,
+    yield_stress,
+    law,
+    *,
+    bisection_iterations=28,
+    direction_iterations=6,
+):
     """Advance a vectorized batch by one strain-controlled increment."""
 
     trial = elastic_stress(strain, state.plastic_strain, young, poisson)
@@ -189,15 +219,39 @@ def advance(strain, state, young, poisson, yield_stress, law, *, bisection_itera
     lower = torch.zeros_like(trial_function)
     upper = 2.0 * F.relu(trial_function) / (3.0 * shear).clamp_min(1.0) + 1.0e-14
     for _ in range(16):
-        residual, *_ = _candidate_update(trial_dev, state, upper, shear, yield_stress, law, direction_iterations=direction_iterations)
+        residual, *_ = _candidate_update(
+            trial_dev,
+            state,
+            upper,
+            shear,
+            yield_stress,
+            law,
+            direction_iterations=direction_iterations,
+        )
         upper = torch.where(plastic & (residual > 0.0), 2.0 * upper, upper)
     for _ in range(bisection_iterations):
         middle = 0.5 * (lower + upper)
-        residual, *_ = _candidate_update(trial_dev, state, middle, shear, yield_stress, law, direction_iterations=direction_iterations)
+        residual, *_ = _candidate_update(
+            trial_dev,
+            state,
+            middle,
+            shear,
+            yield_stress,
+            law,
+            direction_iterations=direction_iterations,
+        )
         lower = torch.where(plastic & (residual > 0.0), middle, lower)
         upper = torch.where(plastic & (residual <= 0.0), middle, upper)
     increment = torch.where(plastic, 0.5 * (lower + upper), torch.zeros_like(lower))
-    residual, direction, memories, recovery, moduli = _candidate_update(trial_dev, state, increment, shear, yield_stress, law, direction_iterations=direction_iterations)
+    residual, direction, memories, recovery, moduli = _candidate_update(
+        trial_dev,
+        state,
+        increment,
+        shear,
+        yield_stress,
+        law,
+        direction_iterations=direction_iterations,
+    )
     direction = torch.where(plastic[..., None], direction, torch.zeros_like(direction))
     memories = torch.where(plastic[..., None, None], memories, state.memories)
     updated = GrayboxState(
@@ -207,13 +261,17 @@ def advance(strain, state, young, poisson, yield_stress, law, *, bisection_itera
         previous_flow=torch.where(plastic[..., None], direction, state.previous_flow),
     )
     stress = elastic_stress(strain, updated.plastic_strain, young, poisson)
-    return stress, updated, {
-        "plastic_increment": increment,
-        "yield_residual": torch.where(plastic, residual, torch.zeros_like(residual)),
-        "recovery": recovery,
-        "moduli": moduli,
-        "plastic": plastic,
-    }
+    return (
+        stress,
+        updated,
+        {
+            "plastic_increment": increment,
+            "yield_residual": torch.where(plastic, residual, torch.zeros_like(residual)),
+            "recovery": recovery,
+            "moduli": moduli,
+            "plastic": plastic,
+        },
+    )
 
 
 DENIM = NeuralHardeningLaw

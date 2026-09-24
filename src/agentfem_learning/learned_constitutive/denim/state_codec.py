@@ -19,10 +19,21 @@ def state_schema(channels: int, *, version: str = "1.0.0") -> MaterialStateSchem
         name=f"denim_graybox_ch{selected}",
         version=version,
         variables=(
-            MaterialStateVariable("plastic_strain", shape=(6,), description="Plastic strain in tensor-shear Voigt order."),
+            MaterialStateVariable(
+                "plastic_strain",
+                shape=(6,),
+                description="Plastic strain in tensor-shear Voigt order.",
+            ),
             MaterialStateVariable("peeq", description="Equivalent plastic strain."),
-            MaterialStateVariable("memories", shape=(selected, 6), unit="Pa", description="Objective kinematic memory channels."),
-            MaterialStateVariable("previous_flow", shape=(6,), description="Previous plastic flow direction."),
+            MaterialStateVariable(
+                "memories",
+                shape=(selected, 6),
+                unit="Pa",
+                description="Objective kinematic memory channels.",
+            ),
+            MaterialStateVariable(
+                "previous_flow", shape=(6,), description="Previous plastic flow direction."
+            ),
         ),
     )
 

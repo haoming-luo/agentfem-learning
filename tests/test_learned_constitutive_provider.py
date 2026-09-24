@@ -24,7 +24,11 @@ from agentfem_learning.learned_constitutive.denim import DENIM, state_schema
 from agentfem_learning.learned_constitutive.denim.export import denim_manifest
 from agentfem_learning.learned_constitutive.denim.loader import load_denim_v1
 from agentfem_learning.learned_constitutive.provider import TorchConstitutiveProvider
-from agentfem_learning.learned_constitutive.registry import register_architecture
+from agentfem_learning.learned_constitutive.registry import (
+    ArchitectureRegistryError,
+    architecture_loader,
+    register_architecture,
+)
 
 torch = pytest.importorskip("torch")
 safetensors = pytest.importorskip("safetensors.torch")
@@ -65,9 +69,7 @@ def _spec(root, *, channels=2):
         revision="fixed-test-revision",
         model_name="denim-expanded",
         model_version="1.1.0",
-        tangent_convention=MaterialTangentConvention.cauchy_small_strain(
-            symmetric=False
-        ),
+        tangent_convention=MaterialTangentConvention.cauchy_small_strain(symmetric=False),
         parameter_schema=(
             MaterialParameterSpec("young", "Pa", minimum=0.0),
             MaterialParameterSpec("poisson", "1", minimum=-1.0, maximum=0.5),
@@ -108,6 +110,22 @@ def test_bundle_checksum_failure_is_fail_closed(tmp_path):
         load_model_bundle(root)
 
 
+def test_bundle_schema_and_nested_manifest_are_immutable(tmp_path):
+    bundle = load_model_bundle(_bundle(tmp_path))
+    assert bundle.summary()["schema"] == "agentfem.learned_constitutive.bundle"
+    assert bundle.summary()["schema_version"] == "1.0.0"
+    with pytest.raises(TypeError):
+        bundle.manifest["architecture"]["channels"] = 7
+
+
+def test_missing_architecture_has_stable_error_code():
+    with pytest.raises(
+        ArchitectureRegistryError,
+        match="AFM-LEARNING-ARCHITECTURE-001",
+    ):
+        architecture_loader("tests.not-registered")
+
+
 def test_state_schema_tracks_memory_channels():
     assert state_schema(1).size == 19
     assert state_schema(2).size == 25
@@ -122,6 +140,16 @@ def test_provider_rejects_missing_bundle_and_state_schema_mismatch(tmp_path):
     register_architecture("denim.v1", load_denim_v1, replace=True)
     with pytest.raises(ModelBundleError, match="State schema differs"):
         provider.create(_spec(root, channels=1))
+
+
+def test_provider_rejects_model_identity_mismatch(tmp_path):
+    root = _bundle(tmp_path)
+    specification = _spec(root)
+    specification = LearnedConstitutiveSpec.from_dict(
+        {**specification.to_dict(), "model_version": "9.9.9"}
+    )
+    with pytest.raises(ModelBundleError, match="model version differs"):
+        TorchConstitutiveProvider().create(specification)
 
 
 def test_scalar_batch_and_autodiff_tangent(tmp_path):
@@ -160,6 +188,10 @@ def test_scalar_batch_and_autodiff_tangent(tmp_path):
     scalar = material.update(point)
     np.testing.assert_allclose(scalar.cauchy_stress, response.cauchy_stress[0])
     np.testing.assert_allclose(scalar.state_new, response.state_new[0])
+    assert scalar.energy_density_components == {
+        name: pytest.approx(values[0])
+        for name, values in response.energy_density_components.items()
+    }
     check = check_small_strain_material_tangent(
         material,
         point,
