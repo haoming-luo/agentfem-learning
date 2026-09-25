@@ -54,7 +54,7 @@ def main() -> None:
         "accepted_increments": len(step.accepted_increments),
         "maximum_displacement": float(domain.comm.allreduce(local_max, op=MPI.MAX)),
         "maximum_equivalent_stress_pa": step.state.equivalent_stress().global_max(),
-        "provider": dict(learned.runtime_evidence),
+        "provider": learned.provider.summary(),
         "specification_fingerprint": learned.specification.fingerprint,
     }
     if domain.comm.rank == 0:

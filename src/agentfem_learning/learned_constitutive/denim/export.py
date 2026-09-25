@@ -47,9 +47,25 @@ def denim_manifest(
         "voigt_order": ["xx", "yy", "zz", "xy", "yz", "xz"],
         "shear_convention": "tensor",
         "parameter_schema": [
-            {"name": "young", "unit": "Pa", "minimum": 0.0},
-            {"name": "poisson", "unit": "1", "minimum": -1.0, "maximum": 0.5},
-            {"name": "yield_stress", "unit": "Pa", "minimum": 0.0},
+            {
+                "name": "young",
+                "unit": "Pa",
+                "minimum": 0.0,
+                "description": "Young's modulus.",
+            },
+            {
+                "name": "poisson",
+                "unit": "1",
+                "minimum": -1.0,
+                "maximum": 0.5,
+                "description": "Poisson ratio.",
+            },
+            {
+                "name": "yield_stress",
+                "unit": "Pa",
+                "minimum": 0.0,
+                "description": "Initial yield stress.",
+            },
         ],
         "state_schema_version": "1.0.0",
         "state_schema": {
@@ -61,7 +77,7 @@ def denim_manifest(
             ],
             "size": 13 + 6 * int(channels),
         },
-        "required_inputs": ["strain_new", "state_old", "parameters"],
+        "required_inputs": ["strain", "state", "parameters"],
         "capabilities": {
             "stress": True,
             "state": True,

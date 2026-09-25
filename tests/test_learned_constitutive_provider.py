@@ -8,12 +8,14 @@ import json
 import numpy as np
 import pytest
 from agentfem.constitutive import (
-    MaterialTangentConvention,
-    SmallStrainMaterialBatchInput,
+    MaterialParameter,
+    MaterialParameterSchema,
+    SmallStrainMaterialPointBatchInput,
     SmallStrainMaterialPointInput,
     check_small_strain_material_tangent,
+    small_strain_tangent_convention,
 )
-from agentfem.learning import LearnedConstitutiveSpec, MaterialParameterSpec
+from agentfem.learning import LearnedConstitutiveSpec
 
 from agentfem_learning.learned_constitutive.artifacts import (
     ModelBundleError,
@@ -62,18 +64,35 @@ def _bundle(tmp_path, *, channels=2):
 
 
 def _spec(root, *, channels=2):
+    manifest_path = root / "model.json"
     return LearnedConstitutiveSpec(
         provider="agentfem-learning.torch-constitutive",
-        architecture_id="denim.v1",
+        architecture="denim.v1",
         artifact=str(root),
         revision="fixed-test-revision",
-        model_name="denim-expanded",
-        model_version="1.1.0",
-        tangent_convention=MaterialTangentConvention.cauchy_small_strain(symmetric=False),
-        parameter_schema=(
-            MaterialParameterSpec("young", "Pa", minimum=0.0),
-            MaterialParameterSpec("poisson", "1", minimum=-1.0, maximum=0.5),
-            MaterialParameterSpec("yield_stress", "Pa", minimum=0.0),
+        artifact_sha256=(
+            file_sha256(manifest_path) if manifest_path.is_file() else "0" * 64
+        ),
+        tangent_convention=small_strain_tangent_convention(),
+        parameter_schema=MaterialParameterSchema(
+            name="denim_v1",
+            version="1.0.0",
+            parameters=(
+                MaterialParameter("young", "Pa", lower=0.0, description="Young's modulus."),
+                MaterialParameter(
+                    "poisson",
+                    "1",
+                    lower=-1.0,
+                    upper=0.5,
+                    description="Poisson ratio.",
+                ),
+                MaterialParameter(
+                    "yield_stress",
+                    "Pa",
+                    lower=0.0,
+                    description="Initial yield stress.",
+                ),
+            ),
         ),
         parameters={
             "young": 190.0e9,
@@ -81,16 +100,29 @@ def _spec(root, *, channels=2):
             "yield_stress": 280.0e6,
         },
         state_schema=state_schema(channels),
-        required_inputs=("strain_new", "state_old", "parameters"),
-        capabilities=("stress", "state", "batch", "energy", "consistent_tangent"),
+        required_inputs=("strain", "state", "parameters"),
+        capabilities=(
+            "stress",
+            "state",
+            "batch",
+            "energy",
+            "diagnostics",
+            "consistent_tangent",
+        ),
         dtype_policy="float64",
         applicability_domain={
             "policy": "report_without_silent_fallback",
             "maximum_absolute_strain": 0.03,
             "maximum_peeq": 0.03,
         },
-        dataset_id="tests/material-paths",
-        dataset_revision="fixed-dataset-revision",
+        dataset={
+            "id": "tests/material-paths",
+            "revision": "fixed-dataset-revision",
+        },
+        provenance={
+            "model_name": "denim-expanded",
+            "model_version": "1.1.0",
+        },
     )
 
 
@@ -145,8 +177,14 @@ def test_provider_rejects_missing_bundle_and_state_schema_mismatch(tmp_path):
 def test_provider_rejects_model_identity_mismatch(tmp_path):
     root = _bundle(tmp_path)
     specification = _spec(root)
-    specification = LearnedConstitutiveSpec.from_dict(
-        {**specification.to_dict(), "model_version": "9.9.9"}
+    specification = LearnedConstitutiveSpec.from_summary(
+        {
+            **specification.summary(),
+            "provenance": {
+                **specification.provenance,
+                "model_version": "9.9.9",
+            },
+        }
     )
     with pytest.raises(ModelBundleError, match="model version differs"):
         TorchConstitutiveProvider().create(specification)
@@ -156,13 +194,20 @@ def test_scalar_batch_and_autodiff_tangent(tmp_path):
     provider, material = _material(tmp_path)
     schema = material.state_schema
     parameters = {"young": 190.0e9, "poisson": 0.3, "yield_stress": 280.0e6}
-    strains = np.asarray(
+    strain_vectors = np.asarray(
         [
             [2.0e-4, 0.0, 0.0, 0.0, 0.0, 0.0],
             [2.4e-3, -4.0e-4, 0.0, 2.0e-4, 0.0, 0.0],
         ]
     )
-    request = SmallStrainMaterialBatchInput(
+    strains = np.zeros((2, 3, 3))
+    strains[:, 0, 0] = strain_vectors[:, 0]
+    strains[:, 1, 1] = strain_vectors[:, 1]
+    strains[:, 2, 2] = strain_vectors[:, 2]
+    strains[:, 0, 1] = strains[:, 1, 0] = strain_vectors[:, 3]
+    strains[:, 1, 2] = strains[:, 2, 1] = strain_vectors[:, 4]
+    strains[:, 0, 2] = strains[:, 2, 0] = strain_vectors[:, 5]
+    request = SmallStrainMaterialPointBatchInput(
         strain_old=np.zeros_like(strains),
         strain_new=strains,
         time=1.0,
@@ -170,27 +215,27 @@ def test_scalar_batch_and_autodiff_tangent(tmp_path):
         parameters=parameters,
         state_old=np.repeat(schema.initial_state()[None, :], 2, axis=0),
         state_schema=schema,
+        parameter_schema=material.parameter_schema,
     )
     response = material.update_batch(request)
-    assert response.cauchy_stress.shape == (2, 6)
+    assert response.cauchy_stress.shape == (2, 3, 3)
     assert response.consistent_tangent.shape == (2, 6, 6)
     assert response.state_new.shape == (2, 25)
     assert np.all(response.stored_energy_density >= 0.0)
-    assert set(response.energy_density_components) == {
-        "elastic_storage",
-        "hardening_storage_increment",
-        "isotropic_hardening_storage",
-        "kinematic_hardening_storage",
-        "modeled_dissipation_increment",
-        "plastic_work_increment",
+    assert set(response.stored_energy_density_components) == {
+        "ELASTIC_STORAGE",
+        "ISOTROPIC_HARDENING_STORAGE",
+        "KINEMATIC_HARDENING_STORAGE",
     }
+    assert "plastic_work_increment" in response.diagnostics[0]
+    assert "modeled_dissipation_increment" in response.diagnostics[0]
     point = request.point(0)
     scalar = material.update(point)
     np.testing.assert_allclose(scalar.cauchy_stress, response.cauchy_stress[0])
     np.testing.assert_allclose(scalar.state_new, response.state_new[0])
-    assert scalar.energy_density_components == {
+    assert scalar.stored_energy_density_components == {
         name: pytest.approx(values[0])
-        for name, values in response.energy_density_components.items()
+        for name, values in response.stored_energy_density_components.items()
     }
     check = check_small_strain_material_tangent(
         material,
@@ -209,13 +254,14 @@ def test_scalar_batch_and_autodiff_tangent(tmp_path):
 def test_elastic_origin_tangent_is_finite(tmp_path):
     _, material = _material(tmp_path)
     point = SmallStrainMaterialPointInput(
-        strain_old=np.zeros(6),
-        strain_new=np.zeros(6),
+        strain_old=np.zeros((3, 3)),
+        strain_new=np.zeros((3, 3)),
         time=0.0,
         time_increment=1.0,
         parameters={"young": 190.0e9, "poisson": 0.3, "yield_stress": 280.0e6},
         state_old=material.state_schema.initial_state(),
         state_schema=material.state_schema,
+        parameter_schema=material.parameter_schema,
     )
     response = material.update(point)
     assert np.all(np.isfinite(response.consistent_tangent))
@@ -241,11 +287,12 @@ def test_nonfinite_or_mismatched_state_is_rejected(tmp_path):
     schema = material.state_schema
     with pytest.raises(ValueError, match="state_old"):
         SmallStrainMaterialPointInput(
-            strain_old=np.zeros(6),
-            strain_new=np.zeros(6),
+            strain_old=np.zeros((3, 3)),
+            strain_new=np.zeros((3, 3)),
             time=1.0,
             time_increment=1.0,
             parameters={"young": 1.0, "poisson": 0.3, "yield_stress": 1.0},
             state_old=np.full(schema.size, np.nan),
             state_schema=schema,
+            parameter_schema=material.parameter_schema,
         )

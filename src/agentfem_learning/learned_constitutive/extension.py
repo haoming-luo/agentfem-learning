@@ -3,7 +3,7 @@
 
 """Explicit AgentFEM extension for learned constitutive runtimes."""
 
-from agentfem import extensions
+from agentfem import extensions, learning
 
 from agentfem_learning import __version__
 
@@ -15,7 +15,22 @@ register_architecture("denim.v1", load_denim_v1, replace=True)
 
 
 def _register(context: extensions.ExtensionContext) -> None:
-    context.add_learned_constitutive_provider(TORCH_CONSTITUTIVE_PROVIDER)
+    context.add_learned_constitutive_provider(
+        learning.LearnedConstitutiveProvider(
+            name=TORCH_CONSTITUTIVE_PROVIDER.name,
+            version=__version__,
+            factory=TORCH_CONSTITUTIVE_PROVIDER.create,
+            architectures=("denim.v1",),
+            capabilities=(
+                "stress",
+                "state",
+                "batch",
+                "energy",
+                "diagnostics",
+                "consistent_tangent",
+            ),
+        )
+    )
 
 
 extension = extensions.Extension(

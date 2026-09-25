@@ -35,20 +35,20 @@ class TorchConstitutiveProvider:
         bundle: ModelBundle,
     ) -> None:
         manifest = bundle.manifest
-        if specification.architecture_id != bundle.architecture_id:
+        if specification.architecture != bundle.architecture_id:
             raise ModelBundleError("Specification architecture differs from model.json.")
-        if specification.model_name != bundle.model_name:
+        declared_name = specification.provenance.get("model_name")
+        if declared_name is not None and declared_name != bundle.model_name:
             raise ModelBundleError("Specification model name differs from model.json.")
-        if specification.model_version != bundle.model_version:
+        declared_version = specification.provenance.get("model_version")
+        if declared_version is not None and declared_version != bundle.model_version:
             raise ModelBundleError("Specification model version differs from model.json.")
-        if specification.artifact_sha256 is not None:
-            accepted = {bundle.manifest_sha256, bundle.weights_sha256}
-            if specification.artifact_sha256 not in accepted:
-                raise ModelBundleError("Specification checksum differs from the local bundle.")
-        if specification.revision is not None:
-            revision = manifest.get("model_revision")
-            if revision is not None and specification.revision != revision:
-                raise ModelBundleError("Specification revision differs from the local bundle.")
+        accepted = {bundle.manifest_sha256, bundle.weights_sha256}
+        if specification.artifact_sha256 not in accepted:
+            raise ModelBundleError("Specification checksum differs from the local bundle.")
+        revision = manifest.get("model_revision")
+        if revision is not None and specification.revision != revision:
+            raise ModelBundleError("Specification revision differs from the local bundle.")
         if tuple(manifest["voigt_order"]) != tuple(
             specification.tangent_convention.component_order
         ):
@@ -60,15 +60,22 @@ class TorchConstitutiveProvider:
         if manifest["stress_measure"] != specification.tangent_convention.stress_measure:
             raise ModelBundleError("Stress measure differs between specification and bundle.")
         expected_parameters = {str(item["name"]): item for item in manifest["parameter_schema"]}
-        declared_parameters = {item.name: item for item in specification.parameter_schema}
+        declared_parameters = {
+            item.name: item for item in specification.parameter_schema.parameters
+        }
         if expected_parameters.keys() != declared_parameters.keys():
             raise ModelBundleError("Material parameter names differ from the model bundle.")
         for name, expected in expected_parameters.items():
             declared = declared_parameters[name]
-            for key in ("unit", "minimum", "maximum"):
-                if expected.get(key) != getattr(declared, key):
+            for manifest_key, schema_key in (
+                ("unit", "unit"),
+                ("minimum", "lower"),
+                ("maximum", "upper"),
+                ("default", "default"),
+            ):
+                if expected.get(manifest_key) != getattr(declared, schema_key):
                     raise ModelBundleError(
-                        f"Material parameter {name!r} {key} differs from the bundle."
+                        f"Material parameter {name!r} {manifest_key} differs from the bundle."
                     )
         if tuple(manifest["required_inputs"]) != tuple(specification.required_inputs):
             raise ModelBundleError("Required inputs differ from the model bundle.")
@@ -91,9 +98,12 @@ class TorchConstitutiveProvider:
             )
         if dict(manifest["applicability_domain"]) != dict(specification.applicability_domain):
             raise ModelBundleError("Applicability domain differs from the model bundle.")
-        for key in ("dataset_id", "dataset_revision"):
-            if manifest.get(key) != getattr(specification, key):
-                raise ModelBundleError(f"{key} differs from the model bundle.")
+        expected_dataset = {
+            "id": manifest.get("dataset_id"),
+            "revision": manifest.get("dataset_revision"),
+        }
+        if dict(specification.dataset) != expected_dataset:
+            raise ModelBundleError("Dataset identity differs from the model bundle.")
 
     def create(
         self,
@@ -111,6 +121,13 @@ class TorchConstitutiveProvider:
             self._load_seconds[key] = time.perf_counter() - started
         if material.state_schema.summary() != specification.state_schema.summary():
             raise ModelBundleError("State schema differs between specification and bundle.")
+        if (
+            material.parameter_schema.summary()
+            != specification.parameter_schema.summary()
+        ):
+            raise ModelBundleError(
+                "Parameter schema differs between specification and bundle."
+            )
         if material.tangent_convention != specification.tangent_convention:
             raise ModelBundleError(
                 "Tangent convention differs between specification and bundle."

@@ -10,11 +10,13 @@ from dataclasses import dataclass
 
 import numpy as np
 from agentfem.constitutive import (
-    MaterialTangentConvention,
-    SmallStrainMaterialBatchInput,
-    SmallStrainMaterialBatchOutput,
+    MaterialParameter,
+    MaterialParameterSchema,
+    SmallStrainMaterialPointBatchInput,
+    SmallStrainMaterialPointBatchOutput,
     SmallStrainMaterialPointInput,
     SmallStrainMaterialPointOutput,
+    small_strain_tangent_convention,
 )
 
 from ..artifacts import ModelBundle
@@ -31,6 +33,23 @@ def _required_parameter(parameters, name: str) -> float:
     if not np.isfinite(value):
         raise ValueError(f"Material parameter {name!r} must be finite.")
     return value
+
+
+def _tensor_to_voigt(values) -> np.ndarray:
+    selected = np.asarray(values, dtype=float)
+    return selected[..., (0, 1, 2, 0, 1, 0), (0, 1, 2, 1, 2, 2)]
+
+
+def _voigt_to_tensor(values) -> np.ndarray:
+    selected = np.asarray(values, dtype=float)
+    result = np.zeros((*selected.shape[:-1], 3, 3), dtype=float)
+    result[..., 0, 0] = selected[..., 0]
+    result[..., 1, 1] = selected[..., 1]
+    result[..., 2, 2] = selected[..., 2]
+    result[..., 0, 1] = result[..., 1, 0] = selected[..., 3]
+    result[..., 1, 2] = result[..., 2, 1] = selected[..., 4]
+    result[..., 0, 2] = result[..., 2, 0] = selected[..., 5]
+    return result
 
 
 @dataclass
@@ -50,10 +69,22 @@ class DenimMaterial:
             self.channels,
             version=str(self.bundle.manifest.get("state_schema_version", "1.0.0")),
         )
-        self.tangent_convention = MaterialTangentConvention.cauchy_small_strain(
-            shear_convention="tensor",
-            symmetric=False,
+        self.parameter_schema = MaterialParameterSchema(
+            name="denim_v1",
+            version=str(self.bundle.manifest.get("schema_version", "1.0.0")),
+            parameters=tuple(
+                MaterialParameter(
+                    name=item["name"],
+                    unit=item.get("unit"),
+                    lower=item.get("minimum"),
+                    upper=item.get("maximum"),
+                    default=item.get("default"),
+                    description=item.get("description", "DENIM material parameter."),
+                )
+                for item in self.bundle.manifest["parameter_schema"]
+            ),
         )
+        self.tangent_convention = small_strain_tangent_convention()
         if self.tangent_mode not in {"autodiff_consistent", "none"}:
             raise ValueError("DENIM tangent mode must be autodiff_consistent or none.")
         self._torch, self._device, self._dtype = self.runtime.resolve()
@@ -107,19 +138,27 @@ class DenimMaterial:
         status = np.full(request.point_count, "in_domain", dtype=object)
         strain_limit = domain.get("maximum_absolute_strain")
         if strain_limit is not None:
-            outside = np.max(np.abs(request.strain_new), axis=1) > float(strain_limit)
+            outside = np.max(np.abs(request.strain_new), axis=(1, 2)) > float(
+                strain_limit
+            )
             status[outside] = "out_of_domain"
         peeq_limit = domain.get("maximum_peeq")
         if peeq_limit is not None:
             status[np.asarray(peeq) > float(peeq_limit)] = "out_of_domain"
         return tuple(str(value) for value in status)
 
-    def update_batch(self, request: SmallStrainMaterialBatchInput):
+    def update_batch(self, request: SmallStrainMaterialPointBatchInput):
         if request.state_schema.summary() != self.state_schema.summary():
             raise ValueError("DENIM request state schema differs from the model bundle.")
+        if request.parameter_schema.summary() != self.parameter_schema.summary():
+            raise ValueError("DENIM parameter schema differs from the model bundle.")
         started = time.perf_counter()
         torch = self._torch
-        strain = torch.as_tensor(request.strain_new, dtype=self._dtype, device=self._device)
+        strain = torch.as_tensor(
+            _tensor_to_voigt(request.strain_new),
+            dtype=self._dtype,
+            device=self._device,
+        )
         old_state = unpack_state(
             request.state_old,
             channels=self.channels,
@@ -174,7 +213,7 @@ class DenimMaterial:
             finite = torch.isfinite(packed_new).all(dim=1) & torch.isfinite(stress).all(dim=1)
             peeq_monotone = new_state.peeq + 1.0e-14 >= old_state.peeq
             plastic_trace = new_state.plastic_strain[:, :3].sum(dim=-1).abs()
-        stress_np = stress.detach().cpu().numpy()
+        stress_np = _voigt_to_tensor(stress.detach().cpu().numpy())
         tangent_np = tangent.detach().cpu().numpy()
         state_np = packed_new.detach().cpu().numpy()
         if not bool(torch.all(finite)):
@@ -185,7 +224,25 @@ class DenimMaterial:
                 statuses[index] = "invalid_state"
         elapsed = time.perf_counter() - started
         count = request.point_count
-        return SmallStrainMaterialBatchOutput(
+        diagnostic_arrays = {
+            "plastic_increment": diagnostics["plastic_increment"].cpu().numpy(),
+            "yield_residual": yield_residual.cpu().numpy(),
+            "plastic": diagnostics["plastic"].cpu().numpy(),
+            "maximum_plastic_trace": plastic_trace.cpu().numpy(),
+            "peeq_monotone": peeq_monotone.cpu().numpy(),
+            "plastic_work_increment": plastic_work.cpu().numpy(),
+            "hardening_storage_increment": hardening_change.cpu().numpy(),
+            "modeled_dissipation_increment": dissipation.cpu().numpy(),
+            "inference_seconds_per_point": np.full(count, elapsed / max(count, 1)),
+        }
+        point_diagnostics = tuple(
+            {
+                name: values[index].item()
+                for name, values in diagnostic_arrays.items()
+            }
+            for index in range(count)
+        )
+        return SmallStrainMaterialPointBatchOutput(
             cauchy_stress=stress_np,
             consistent_tangent=tangent_np,
             state_new=state_np,
@@ -194,29 +251,19 @@ class DenimMaterial:
             stored_energy_density=(elastic_energy + isotropic_energy + kinematic_energy)
             .cpu()
             .numpy(),
-            dissipated_energy_density=dissipation.cpu().numpy(),
+            dissipation_density_increment=dissipation.cpu().numpy(),
             suggested_time_scale=np.ones(count),
-            applicability_status=tuple(statuses),
-            energy_density_components={
+            applicability=tuple(statuses),
+            stored_energy_density_components={
                 "elastic_storage": elastic_energy.cpu().numpy(),
                 "isotropic_hardening_storage": isotropic_energy.cpu().numpy(),
                 "kinematic_hardening_storage": kinematic_energy.cpu().numpy(),
-                "plastic_work_increment": plastic_work.cpu().numpy(),
-                "hardening_storage_increment": hardening_change.cpu().numpy(),
-                "modeled_dissipation_increment": dissipation.cpu().numpy(),
             },
-            diagnostics={
-                "plastic_increment": diagnostics["plastic_increment"].cpu().numpy(),
-                "yield_residual": yield_residual.cpu().numpy(),
-                "plastic": diagnostics["plastic"].cpu().numpy(),
-                "maximum_plastic_trace": plastic_trace.cpu().numpy(),
-                "peeq_monotone": peeq_monotone.cpu().numpy(),
-                "inference_seconds_per_point": np.full(count, elapsed / max(count, 1)),
-            },
+            diagnostics=point_diagnostics,
         )
 
     def update(self, point: SmallStrainMaterialPointInput):
-        request = SmallStrainMaterialBatchInput(
+        request = SmallStrainMaterialPointBatchInput(
             strain_old=point.strain_old[None, :],
             strain_new=point.strain_new[None, :],
             time=point.time,
@@ -224,15 +271,17 @@ class DenimMaterial:
             parameters=point.parameters,
             state_old=point.state_old[None, :],
             state_schema=point.state_schema,
+            parameter_schema=point.parameter_schema,
             temperature=None if point.temperature is None else np.asarray([point.temperature]),
             temperature_increment=(
                 None
                 if point.temperature_increment is None
                 else np.asarray([point.temperature_increment])
             ),
-            field_variables=(
-                None if point.field_variables is None else point.field_variables[None, :]
-            ),
+            field_variables={
+                name: np.asarray([value])
+                for name, value in point.field_variables.items()
+            },
         )
         response = self.update_batch(request)
         return SmallStrainMaterialPointOutput(
@@ -242,16 +291,16 @@ class DenimMaterial:
             tangent_convention=self.tangent_convention,
             state_schema=self.state_schema,
             stored_energy_density=float(response.stored_energy_density[0]),
-            dissipated_energy_density=float(response.dissipated_energy_density[0]),
-            energy_density_components={
+            dissipation_density_increment=float(
+                response.dissipation_density_increment[0]
+            ),
+            stored_energy_density_components={
                 name: float(values[0])
-                for name, values in response.energy_density_components.items()
+                for name, values in response.stored_energy_density_components.items()
             },
-            diagnostics={
-                name: values[0].item() for name, values in response.diagnostics.items()
-            },
+            diagnostics=response.diagnostics[0],
             suggested_time_scale=float(response.suggested_time_scale[0]),
-            applicability_status=response.applicability_status[0],
+            applicability=response.applicability[0],
         )
 
 

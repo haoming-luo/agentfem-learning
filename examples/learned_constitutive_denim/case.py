@@ -8,12 +8,11 @@ from math import pi
 from pathlib import Path
 
 import numpy as np
-from agentfem import constitutive, learning
+from agentfem import constitutive, extensions, learning, materials
 
+from agentfem_learning.learned_constitutive.artifacts import file_sha256
 from agentfem_learning.learned_constitutive.denim import state_schema
-from agentfem_learning.learned_constitutive.denim.loader import load_denim_v1
-from agentfem_learning.learned_constitutive.provider import TorchConstitutiveProvider
-from agentfem_learning.learned_constitutive.registry import register_architecture
+from agentfem_learning.learned_constitutive.provider import TORCH_CONSTITUTIVE_PROVIDER
 
 MODEL_REVISION = "5629df0a23a3d1ed43e9de2150e3d33cb979fdc1"
 DATASET_REVISION = "c84f416e5a71daa157e406c50afc3fc73509b9ca"
@@ -22,30 +21,57 @@ DATASET_REVISION = "c84f416e5a71daa157e406c50afc3fc73509b9ca"
 def specification(bundle: Path):
     return learning.learned_constitutive(
         provider="agentfem-learning.torch-constitutive",
-        architecture_id="denim.v1",
+        architecture="denim.v1",
         artifact=str(bundle),
         revision=MODEL_REVISION,
-        model_name="denim-expanded",
-        model_version="1.1.0",
-        tangent_convention=constitutive.MaterialTangentConvention.cauchy_small_strain(
-            symmetric=False
-        ),
-        parameter_schema=(
-            learning.MaterialParameterSpec("young", "Pa", minimum=0.0),
-            learning.MaterialParameterSpec("poisson", "1", minimum=-1.0, maximum=0.5),
-            learning.MaterialParameterSpec("yield_stress", "Pa", minimum=0.0),
+        artifact_sha256=file_sha256(bundle / "model.json"),
+        tangent_convention=constitutive.small_strain_tangent_convention(),
+        parameter_schema=constitutive.MaterialParameterSchema(
+            name="denim_v1",
+            version="1.0.0",
+            parameters=(
+                constitutive.MaterialParameter(
+                    "young", "Pa", lower=0.0, description="Young's modulus."
+                ),
+                constitutive.MaterialParameter(
+                    "poisson",
+                    "1",
+                    lower=-1.0,
+                    upper=0.5,
+                    description="Poisson ratio.",
+                ),
+                constitutive.MaterialParameter(
+                    "yield_stress",
+                    "Pa",
+                    lower=0.0,
+                    description="Initial yield stress.",
+                ),
+            ),
         ),
         parameters={"young": 190.0e9, "poisson": 0.3, "yield_stress": 280.0e6},
         state_schema=state_schema(2),
-        required_inputs=("strain_new", "state_old", "parameters"),
-        capabilities=("stress", "state", "batch", "energy", "consistent_tangent"),
+        required_inputs=("strain", "state", "parameters"),
+        capabilities=(
+            "stress",
+            "state",
+            "batch",
+            "energy",
+            "diagnostics",
+            "consistent_tangent",
+        ),
         applicability_domain={
             "policy": "report_without_silent_fallback",
             "maximum_absolute_strain": 0.03,
             "maximum_peeq": 0.03,
         },
-        dataset_id="HaomingLuo/AgentFEM-Material-Loading-Memory",
-        dataset_revision=DATASET_REVISION,
+        dataset={
+            "id": "HaomingLuo/AgentFEM-Material-Loading-Memory",
+            "revision": DATASET_REVISION,
+        },
+        provenance={
+            "model_name": "denim-expanded",
+            "model_version": "1.1.0",
+        },
     )
 
 
@@ -54,10 +80,9 @@ def main() -> None:
     parser.add_argument("--bundle", type=Path, required=True)
     parser.add_argument("--output", type=Path, default=Path("denim-material-point.json"))
     args = parser.parse_args()
-    register_architecture("denim.v1", load_denim_v1, replace=True)
-    provider = TorchConstitutiveProvider()
+    extensions.load_extension("agentfem-learning.learned-constitutive")
     spec = specification(args.bundle.resolve())
-    material = provider.create(spec)
+    material = materials.learned(spec)
     coordinate = np.linspace(0.0, 1.0, 121)
     amplitude = np.where(coordinate <= 0.5, 2.0 * coordinate, 2.0 * (1.0 - coordinate))
     scalar = 0.008 * np.sin(2.0 * pi * coordinate) * amplitude
@@ -66,9 +91,16 @@ def main() -> None:
     stress_history = []
     peeq_history = []
     residual_history = []
-    old_strain = np.zeros(6)
+    old_strain = np.zeros((3, 3))
     for step, value in enumerate(scalar, start=1):
-        new_strain = value * basis
+        vector = value * basis
+        new_strain = np.asarray(
+            (
+                (vector[0], vector[3], vector[5]),
+                (vector[3], vector[1], vector[4]),
+                (vector[5], vector[4], vector[2]),
+            )
+        )
         response = material.update(
             constitutive.SmallStrainMaterialPointInput(
                 strain_old=old_strain,
@@ -78,6 +110,7 @@ def main() -> None:
                 parameters=spec.parameters,
                 state_old=state,
                 state_schema=material.state_schema,
+                parameter_schema=material.parameter_schema,
             )
         )
         stress_history.append(response.cauchy_stress.tolist())
@@ -87,8 +120,8 @@ def main() -> None:
         old_strain = new_strain
     record = {
         "schema": "agentfem-learning.denim-material-point.v1",
-        "specification": spec.to_dict(),
-        "runtime": provider.evidence(spec),
+        "specification": spec.summary(),
+        "runtime": TORCH_CONSTITUTIVE_PROVIDER.evidence(spec),
         "maximum_absolute_stress_mpa": float(np.max(np.abs(stress_history)) / 1.0e6),
         "final_peeq": peeq_history[-1],
         "maximum_yield_residual_pa": float(np.max(np.abs(residual_history))),
