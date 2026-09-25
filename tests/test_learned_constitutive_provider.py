@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import numpy as np
 import pytest
+from agentfem import fields, learning, materials, mesh, models, solvers, steps, studies
 from agentfem.constitutive import (
     MaterialParameter,
     MaterialParameterSchema,
@@ -16,6 +18,8 @@ from agentfem.constitutive import (
     small_strain_tangent_convention,
 )
 from agentfem.learning import LearnedConstitutiveSpec
+from dolfinx import mesh as dolfinx_mesh
+from mpi4py import MPI
 
 from agentfem_learning.learned_constitutive.artifacts import (
     ModelBundleError,
@@ -70,9 +74,7 @@ def _spec(root, *, channels=2):
         architecture="denim.v1",
         artifact=str(root),
         revision="fixed-test-revision",
-        artifact_sha256=(
-            file_sha256(manifest_path) if manifest_path.is_file() else "0" * 64
-        ),
+        artifact_sha256=(file_sha256(manifest_path) if manifest_path.is_file() else "0" * 64),
         tangent_convention=small_strain_tangent_convention(),
         parameter_schema=MaterialParameterSchema(
             name="denim_v1",
@@ -280,6 +282,77 @@ def test_provider_caches_one_loaded_model(tmp_path):
     register_architecture("denim.v1", load_denim_v1, replace=True)
     provider = TorchConstitutiveProvider()
     assert provider.create(specification) is provider.create(specification)
+
+
+def test_denim_provider_drives_global_implicit_step(tmp_path):
+    shared_tmp = Path(
+        MPI.COMM_WORLD.bcast(
+            str(tmp_path) if MPI.COMM_WORLD.rank == 0 else None,
+            root=0,
+        )
+    )
+    root = _bundle(shared_tmp) if MPI.COMM_WORLD.rank == 0 else shared_tmp / "bundle"
+    MPI.COMM_WORLD.barrier()
+    specification = _spec(root)
+    register_architecture("denim.v1", load_denim_v1, replace=True)
+    provider = TorchConstitutiveProvider()
+    learning.register_learned_constitutive_provider(
+        learning.LearnedConstitutiveProvider(
+            name=provider.name,
+            version="test",
+            factory=provider.create,
+            architectures=("denim.v1",),
+            capabilities=specification.capabilities,
+        ),
+        replace=True,
+    )
+    learned = materials.learned(specification)
+    domain = dolfinx_mesh.create_box(
+        MPI.COMM_WORLD,
+        [np.zeros(3), np.asarray((1.0, 0.2, 0.2))],
+        [2, 1, 1],
+        cell_type=dolfinx_mesh.CellType.tetrahedron,
+    )
+    model = models.create(
+        study=studies.static_solid(dimension=3, nonlinear=True),
+        mesh=domain,
+    )
+    displacement = model.field(fields.displacement(domain))
+    model.material(learned)
+    model.fix(displacement, on=mesh.face(domain, axis="x", value=0.0), component=0)
+    model.fix(displacement, on=mesh.face(domain, axis="y", value=0.0), component=1)
+    model.fix(displacement, on=mesh.face(domain, axis="z", value=0.0), component=2)
+    model.fix(
+        displacement,
+        on=mesh.face(domain, axis="x", value=1.0),
+        component=0,
+        value=1.0e-6,
+    )
+    step = model.step(
+        target=displacement,
+        material=learned,
+        incrementation=steps.fixed(2),
+        solver_options=solvers.newton(maximum_iterations=10, line_search="basic"),
+        progress=False,
+    )
+    step.solve(until=0.5)
+    checkpoint = step.save_checkpoint(shared_tmp / "denim-global")
+    step.solve()
+    reference = displacement.value.x.array.copy()
+    step.load_checkpoint(checkpoint)
+    assert step.accepted_load_factor == pytest.approx(0.5)
+    step.solve()
+    result = step.solve_result()
+
+    assert step.last_solve_info.completed_step
+    np.testing.assert_allclose(displacement.value.x.array, reference)
+    assert result.metadata["learned_constitutive"]["specification_fingerprint"] == (
+        specification.fingerprint
+    )
+    assert result.fields["S"].location == "quadrature_points"
+    assert result.fields["peeq"].location == "quadrature_points"
+    assert result.fields["SENER_CELL"].location == "cells"
+    assert np.max(np.abs(displacement.value.x.array)) == pytest.approx(1.0e-6)
 
 
 def test_nonfinite_or_mismatched_state_is_rejected(tmp_path):
