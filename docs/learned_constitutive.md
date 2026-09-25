@@ -95,12 +95,11 @@ The fixed 121-step reference path after bundle migration gives approximately
 are a software regression, not a declaration that every finite-element result
 using the model is validated.
 
-The companion examples also run the same prepared artifact through an ordinary
-three-dimensional AgentFEM nonlinear Step. The maintained acceptance case
-converges in serial and two-rank MPI with matching maximum displacement and
-stress; it exercises extension discovery, cached batched inference, the
-consistent tangent, global equilibrium, structured results, and provenance
-from installed wheels.
+The current acceptance boundary is the framework-neutral material-point and
+rank-local batch contract. Promotion to an implicit finite-element capability
+requires a core AgentFEM Step provider, installed-wheel structural regression,
+and serial/two-rank agreement; the companion does not infer that capability
+from a passing tangent check alone.
 
 ## References
 

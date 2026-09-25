@@ -26,7 +26,7 @@ NeuralOperatorSpec + ScientificFieldDataset -> official NeuralOperator FNO/TFNO/
                 -> held-out field evidence + reloadable model artifact
 
 LearnedConstitutiveSpec -> verified local bundle -> batched material update
-                -> consistent tangent -> ordinary AgentFEM nonlinear Step
+                -> state + energy + diagnostics + consistent tangent
 ```
 
 The XDEM providers are experimental. The packaging regression is a normalized
@@ -129,7 +129,6 @@ python examples/finite_domain_benchmarks/case.py --case two
 python examples/fno_heat_operator/case.py --output outputs/fno_heat_operator
 python examples/gino_geometry_operator/case.py --output outputs/gino_geometry_operator --smoke
 python examples/learned_constitutive_denim/case.py --bundle models/denim-expanded
-python examples/learned_constitutive_denim/global_bar.py --bundle models/denim-expanded
 ```
 
 The heat example is a real FEM-to-operator path: AgentFEM solves a family of
