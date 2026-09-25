@@ -56,6 +56,15 @@ def _voigt_to_tensor(values) -> np.ndarray:
 class DenimMaterial:
     """Pure, cached, batched material update produced by the generic provider."""
 
+    provides_stored_energy_density = True
+    provides_dissipation_density_increment = True
+    rate_independent = True
+    stored_energy_component_names = (
+        "ELASTIC_STORAGE",
+        "ISOTROPIC_HARDENING_STORAGE",
+        "KINEMATIC_HARDENING_STORAGE",
+    )
+
     bundle: ModelBundle
     law: object
     runtime: TorchRuntime
@@ -90,6 +99,16 @@ class DenimMaterial:
         self._torch, self._device, self._dtype = self.runtime.resolve()
         self.law.to(device=self._device, dtype=self._dtype)
         self.law.eval()
+
+    def runtime_evidence(self) -> dict[str, object]:
+        """Return portable execution identity for AgentFEM result evidence."""
+
+        return {
+            **self.bundle.summary(),
+            **self.runtime.summary(),
+            "tangent_generation": self.tangent_mode,
+            "offline_runtime": True,
+        }
 
     def _parameters(self, request):
         count = request.point_count
@@ -138,9 +157,7 @@ class DenimMaterial:
         status = np.full(request.point_count, "in_domain", dtype=object)
         strain_limit = domain.get("maximum_absolute_strain")
         if strain_limit is not None:
-            outside = np.max(np.abs(request.strain_new), axis=(1, 2)) > float(
-                strain_limit
-            )
+            outside = np.max(np.abs(request.strain_new), axis=(1, 2)) > float(strain_limit)
             status[outside] = "out_of_domain"
         peeq_limit = domain.get("maximum_peeq")
         if peeq_limit is not None:
@@ -236,10 +253,7 @@ class DenimMaterial:
             "inference_seconds_per_point": np.full(count, elapsed / max(count, 1)),
         }
         point_diagnostics = tuple(
-            {
-                name: values[index].item()
-                for name, values in diagnostic_arrays.items()
-            }
+            {name: values[index].item() for name, values in diagnostic_arrays.items()}
             for index in range(count)
         )
         return SmallStrainMaterialPointBatchOutput(
@@ -279,8 +293,7 @@ class DenimMaterial:
                 else np.asarray([point.temperature_increment])
             ),
             field_variables={
-                name: np.asarray([value])
-                for name, value in point.field_variables.items()
+                name: np.asarray([value]) for name, value in point.field_variables.items()
             },
         )
         response = self.update_batch(request)
@@ -291,9 +304,7 @@ class DenimMaterial:
             tangent_convention=self.tangent_convention,
             state_schema=self.state_schema,
             stored_energy_density=float(response.stored_energy_density[0]),
-            dissipation_density_increment=float(
-                response.dissipation_density_increment[0]
-            ),
+            dissipation_density_increment=float(response.dissipation_density_increment[0]),
             stored_energy_density_components={
                 name: float(values[0])
                 for name, values in response.stored_energy_density_components.items()
