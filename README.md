@@ -154,6 +154,8 @@ result = model.step(
 
 See [neural operators](docs/neural_operators.md) for the capability boundary,
 artifacts, reload API, and the distinct structured-grid and geometry-aware paths.
+See the [material-memory and DENIM laboratory](docs/material_memory_and_denim_lab.md)
+for the learned-constitutive workflow and its verification boundary.
 
 The `xvem` and `center_exact` commands are public extended patch tests and
 should be accepted. The latter supplies the exact Westergaard field throughout

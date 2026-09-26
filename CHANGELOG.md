@@ -2,6 +2,15 @@
 
 ## 0.1.0a1 - Unreleased
 
+- Add the fixed DENIM v1 acceptance contract: authenticated checkpoint
+  migration, installed-wheel model/data identity, a 121-step material-point
+  Golden, a genuinely plastic global-Newton bar Golden, and a separately
+  authenticated published scientific comparison receipt with explicit scope
+  and limitations.
+- Add a beginner-readable material-memory laboratory and offline preparation,
+  execution, and acceptance commands without adding Hugging Face or PyTorch to
+  AgentFEM core.
+
 - Add the first official NeuralOperator provider with FNO and TFNO models,
   deterministic field-dataset splitting, channel normalization, early
   stopping, best-state recovery, held-out physical-field error, safe

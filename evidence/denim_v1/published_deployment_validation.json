@@ -1,0 +1,43 @@
+{
+  "scope": "reference has three memories and tabulated hardening; deployed DENRM has two memories and no access to the reference equations",
+  "time_discretization": {
+    "121": {
+      "trajectory_count": 8,
+      "rmse_mpa": 0.9438070587644558,
+      "mae_mpa": 0.5064686423720376,
+      "maximum_yield_residual_pa": 0.23421859741210938
+    },
+    "481": {
+      "trajectory_count": 8,
+      "rmse_mpa": 0.9584221120986024,
+      "mae_mpa": 0.5178831071589605,
+      "maximum_yield_residual_pa": 0.062465548515319824
+    },
+    "terminal_121_to_481_relative_change": 0.010678476861357365
+  },
+  "structure": {
+    "mild_cyclic": {
+      "reaction_relative_l2": 0.0063571165780202015,
+      "maximum_absolute_reaction_error": 3322117.808588028,
+      "maximum_newton_iterations": 39,
+      "mean_newton_iterations": 3.1728395061728394,
+      "trust_region_fallback_count": 0,
+      "trust_region_fallback_steps": [],
+      "elapsed_seconds": 32.52564716688357
+    },
+    "severe_monotonic": {
+      "reaction_relative_l2": 0.004998587374687885,
+      "maximum_absolute_reaction_error": 2280042.1006396413,
+      "maximum_newton_iterations": 4,
+      "mean_newton_iterations": 2.918032786885246,
+      "trust_region_fallback_count": 0,
+      "trust_region_fallback_steps": [],
+      "elapsed_seconds": 22.391408500028774
+    },
+    "severe_cyclic_stress_test": {
+      "passed": true,
+      "maximum_newton_iterations": 68,
+      "trust_region_fallback_count": 1
+    }
+  }
+}

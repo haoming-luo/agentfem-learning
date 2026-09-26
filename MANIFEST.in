@@ -3,5 +3,6 @@ include CHANGELOG.md
 include CITATION.cff
 include acceptance_gate.py
 include environment.yml
+recursive-include evidence *.json *.md
 recursive-include examples *.py
 recursive-include tests *.py

@@ -11,7 +11,10 @@ import numpy as np
 from agentfem import constitutive, extensions, learning, materials
 
 from agentfem_learning.learned_constitutive.artifacts import file_sha256
-from agentfem_learning.learned_constitutive.denim import state_schema
+from agentfem_learning.learned_constitutive.denim import (
+    evaluate_material_point,
+    state_schema,
+)
 from agentfem_learning.learned_constitutive.provider import TORCH_CONSTITUTIVE_PROVIDER
 
 MODEL_REVISION = "5629df0a23a3d1ed43e9de2150e3d33cb979fdc1"
@@ -120,6 +123,12 @@ def main() -> None:
         old_strain = new_strain
     record = {
         "schema": "agentfem-learning.denim-material-point.v1",
+        "loading_path": {
+            "identity": "denim-v1-cyclic-deviatoric@1",
+            "points": 121,
+            "peak_scalar_strain": 0.008,
+            "voigt_basis": basis.tolist(),
+        },
         "specification": spec.summary(),
         "runtime": TORCH_CONSTITUTIVE_PROVIDER.evidence(spec),
         "maximum_absolute_stress_mpa": float(np.max(np.abs(stress_history)) / 1.0e6),
@@ -128,9 +137,15 @@ def main() -> None:
         "stress": stress_history,
         "peeq": peeq_history,
     }
+    record["acceptance"] = evaluate_material_point(record).summary()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps({key: value for key, value in record.items() if key not in {"stress", "peeq"}}, indent=2))
+    print(
+        json.dumps(
+            {key: value for key, value in record.items() if key not in {"stress", "peeq"}},
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":
