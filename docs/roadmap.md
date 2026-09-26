@@ -154,11 +154,20 @@ core `model.step(target=spec, executor=...)` boundary.
   rotation covariance, and a quadratic three-dimensional plastic cantilever
   with separate mesh and increment convergence axes. The path source defines
   topology only and is not misrepresented as a copper calibration.
-- **Next gate:** establish an experimental or independently published material
-  calibration with immutable raw data, declared fitting/held-out partitions,
-  units and calibration objective. Only after that evidence should
-  temperature, strain-rate, finite-strain, or additional learned architectures
-  broaden the public capability claim.
+- **Real-data pilot implemented, current asset rejected:** a generic uniaxial
+  experiment contract now provides explicit column/unit mapping, source
+  identity, bounded path reduction, axial-strain/free-traction mixed control,
+  transactional failure and comparison metrics. On one immutable S355J2+M LP8
+  coupon, the fixed synthetic DENIM v1 asset fails the 5% stress threshold and
+  exits its declared domain. This closes the execution gap without claiming
+  calibration.
+- **Next gate:** select a licensed experimental campaign with at least three
+  distinct specimens or protocols; freeze sample-level fit, validation and
+  held-out partitions; train a new material-specific asset; then evaluate the
+  untouched held-out samples. Do not mutate the fixed DENIM v1 identity or
+  split one time history into misleading pseudo-independent samples. Only
+  after accepted blind evidence should temperature, strain-rate, finite-
+  strain, or additional learned architectures broaden the public claim.
 
 ## Promotion rule
 

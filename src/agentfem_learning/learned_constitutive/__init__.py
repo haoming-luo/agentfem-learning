@@ -15,6 +15,16 @@ from .calibration import (
     CalibrationEvidenceReport,
     evaluate_calibration_evidence,
 )
+from .experimental import (
+    ExperimentalUniaxialHistory,
+    prefix_uniaxial_history,
+    read_uniaxial_csv,
+    simplify_uniaxial_history,
+    truncate_to_strain_domain,
+    uniaxial_stress_free_path,
+    uniaxial_stress_metrics,
+    validate_sample_partitions,
+)
 from .history import LearnedMaterialHistory, run_small_strain_material_history
 from .provider import TORCH_CONSTITUTIVE_PROVIDER, TorchConstitutiveProvider
 from .registry import (
@@ -30,13 +40,21 @@ __all__ = [
     "ArchitectureRegistryError",
     "CalibrationCheck",
     "CalibrationEvidenceReport",
+    "ExperimentalUniaxialHistory",
     "LearnedMaterialHistory",
     "ModelBundle",
     "ModelBundleError",
     "TorchConstitutiveProvider",
     "evaluate_calibration_evidence",
     "load_model_bundle",
+    "prefix_uniaxial_history",
+    "read_uniaxial_csv",
     "register_architecture",
     "registered_architectures",
     "run_small_strain_material_history",
+    "simplify_uniaxial_history",
+    "truncate_to_strain_domain",
+    "uniaxial_stress_free_path",
+    "uniaxial_stress_metrics",
+    "validate_sample_partitions",
 ]

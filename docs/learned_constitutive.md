@@ -145,6 +145,20 @@ accepted blind metrics. The example template deliberately has
 partitions or metrics remain placeholders. This is the remaining scientific
 gate for DENIM v1, not a missing solver feature.
 
+The first real-data pilot now exercises that boundary. A generic experimental
+history contract reads explicitly mapped columns and units, fingerprints the
+source file, preserves sample identity, reduces a curve without smoothing it,
+and translates a uniaxial coupon to axial-strain/free-traction mixed control.
+The local Newton solve uses trial state atomically: failed iterations and
+out-of-domain steps are never committed.
+
+Against Hartloper et al.'s published S355J2+M LP8 coupon, the mixed-control
+residual is below one pascal, but fixed DENIM v1 stops out of domain and gives
+about 24.46% stress-range-normalized RMSE on the accepted prefix. This is a
+useful rejected baseline, not a calibration. The compact receipt is
+`evidence/denim_v1/experimental_pilot.json`; raw experimental arrays remain at
+their licensed source.
+
 ## References
 
 - [AgentFEM-DENIM fixed model revision](https://huggingface.co/HaomingLuo/AgentFEM-DENIM/tree/5629df0a23a3d1ed43e9de2150e3d33cb979fdc1)
@@ -152,3 +166,5 @@ gate for DENIM v1, not a missing solver feature.
 - [Abaqus simple proportional and non-proportional cyclic tests](https://docs.software.vt.edu/abaqusv2025/English/SIMACAEBMKRefMap/simabmk-c-cyclictests.htm)
 - [PyTorch function transforms and Jacobians](https://docs.pytorch.org/docs/stable/func.api.html)
 - [Safetensors format](https://huggingface.co/docs/safetensors/)
+- [Hartloper et al. cyclic and tensile coupon database](https://doi.org/10.5281/zenodo.6965147)
+- [Immutable pilot sample in the authors' processing repository](https://github.com/ahartloper/rlmtp/blob/6ad0092094d0de3d00cb573bbb8ff22d2fb338a7/Examples/HEM320C-LP8_Specimen_1_processed_data.csv)
