@@ -29,7 +29,23 @@ The default `0.004` displacement deliberately enters plastic flow; the result
 must contain positive PEEQ and only in-domain material points to pass its
 software Golden.
 
-Use `verify_acceptance.py` to combine the two software regressions with the
-separately authenticated published comparison receipt. See the
+Two stronger gates test behavior rather than one fixed answer:
+
+```bash
+python examples/learned_constitutive_denim/nonproportional_path.py \
+  --bundle models/denim-expanded
+python examples/learned_constitutive_denim/global_cantilever_convergence.py \
+  --bundle models/denim-expanded
+```
+
+The first preserves exact physical knots while refining an independently
+published tension-torsion path topology and checks rigid-rotation covariance.
+The second runs three mesh levels and three increment levels with one shared
+reference case, so five solves replace a wasteful nine-case product. Reaction
+convergence is the mesh gate; clamp-sensitive peak PEEQ is reported but is not
+misrepresented as a converged design quantity.
+
+Use `verify_acceptance.py` to combine the software and convergence regressions
+with the separately authenticated published comparison receipt. See the
 [material-memory laboratory](../../docs/material_memory_and_denim_lab.md) for
 the concepts and exact commands.

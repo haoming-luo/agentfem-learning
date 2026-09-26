@@ -98,6 +98,27 @@ def _close(name: str, observed: object, rule: Mapping[str, object]) -> Acceptanc
     )
 
 
+def _bounded(
+    name: str,
+    observed: object,
+    *,
+    lower: float | None = None,
+    upper: float | None = None,
+) -> AcceptanceCheck:
+    finite = isinstance(observed, (int, float)) and math.isfinite(float(observed))
+    accepted = finite
+    if finite and lower is not None:
+        accepted = accepted and float(observed) >= float(lower)
+    if finite and upper is not None:
+        accepted = accepted and float(observed) <= float(upper)
+    return AcceptanceCheck(
+        name,
+        bool(accepted),
+        observed,
+        {"lower": lower, "upper": upper},
+    )
+
+
 def _identity_checks(runtime: Mapping[str, object], contract: Mapping[str, object]):
     identity = contract["identity"]
     return (
@@ -215,9 +236,7 @@ def evaluate_global_bar(
     runtime = _path(record, "learned_constitutive", "runtime")
     diagnostics = _path(record, "learned_constitutive", "diagnostics")
     counts = (
-        diagnostics.get("applicability_counts", {})
-        if isinstance(diagnostics, Mapping)
-        else {}
+        diagnostics.get("applicability_counts", {}) if isinstance(diagnostics, Mapping) else {}
     )
     try:
         count_values = [int(value) for value in counts.values()]
@@ -280,6 +299,175 @@ def evaluate_global_bar(
     )
 
 
+def evaluate_nonproportional_path(
+    record: Mapping[str, object],
+    contract: Mapping[str, object] | None = None,
+) -> AcceptanceReport:
+    """Evaluate a non-proportional path without claiming alloy calibration."""
+
+    contract = contract or load_denim_v1_acceptance()
+    gate = contract["nonproportional_path_gate"]
+    runtime = record.get("runtime", {})
+    checks = [
+        _equal("record.schema", record.get("schema"), gate["schema"]),
+        _equal(
+            "path.identity",
+            _path(record, "path", "identity"),
+            gate["path_identity"],
+        ),
+        _equal(
+            "path.reference_role",
+            _path(record, "path", "reference_role"),
+            "path_topology_only_not_numerical_calibration",
+        ),
+        _equal(
+            "path.refinement_factors",
+            _path(record, "path", "refinement_factors"),
+            gate["refinement_factors"],
+        ),
+        _bounded(
+            "final_peeq_is_plastic",
+            record.get("final_peeq"),
+            lower=float(gate["minimum_final_peeq"]),
+        ),
+        _bounded(
+            "peeq_monotonicity",
+            record.get("minimum_peeq_increment"),
+            lower=-float(gate["maximum_peeq_decrease"]),
+        ),
+        _bounded(
+            "refinement.stress_relative_l2",
+            _path(record, "refinement", "stress_relative_l2"),
+            upper=float(gate["maximum_refined_stress_relative_l2"]),
+        ),
+        _bounded(
+            "refinement.peeq_relative_l2",
+            _path(record, "refinement", "peeq_relative_l2"),
+            upper=float(gate["maximum_refined_peeq_relative_l2"]),
+        ),
+        _bounded(
+            "rotation_covariance.stress_relative_l2",
+            _path(record, "rotation_covariance", "stress_relative_l2"),
+            upper=float(gate["maximum_rotation_relative_l2"]),
+        ),
+        _bounded(
+            "rotation_covariance.peeq_relative_l2",
+            _path(record, "rotation_covariance", "peeq_relative_l2"),
+            upper=float(gate["maximum_rotation_relative_l2"]),
+        ),
+        _bounded(
+            "physics.maximum_yield_residual_pa",
+            _path(record, "physics", "maximum_yield_residual_pa"),
+            upper=float(gate["maximum_yield_residual_pa"]),
+        ),
+        _bounded(
+            "physics.maximum_plastic_strain_trace",
+            _path(record, "physics", "maximum_plastic_strain_trace"),
+            upper=float(gate["maximum_plastic_strain_trace"]),
+        ),
+        _equal(
+            "physics.all_refinements_usable",
+            _path(record, "physics", "all_refinements_usable"),
+            True,
+        ),
+        _equal(
+            "physics.rotated_path_usable",
+            _path(record, "physics", "rotated_path_usable"),
+            True,
+        ),
+        *_identity_checks(runtime if isinstance(runtime, Mapping) else {}, contract),
+    ]
+    return AcceptanceReport(
+        "denim_v1_nonproportional_path_gate",
+        tuple(checks),
+        contract["maturity"],
+    )
+
+
+def evaluate_structural_convergence(
+    record: Mapping[str, object],
+    contract: Mapping[str, object] | None = None,
+) -> AcceptanceReport:
+    """Evaluate two independent structural convergence axes."""
+
+    contract = contract or load_denim_v1_acceptance()
+    gate = contract["structural_convergence_gate"]
+    runtime = record.get("runtime", {})
+    axes = record.get("axes", {})
+    all_cases = []
+    case_identities: set[tuple[tuple[int, ...], int]] = set()
+    if isinstance(axes, Mapping):
+        for name in ("mesh", "increment"):
+            values = axes.get(name, ())
+            if isinstance(values, list):
+                for case in values:
+                    if not isinstance(case, Mapping):
+                        continue
+                    identity = (
+                        tuple(int(value) for value in case.get("cells_per_axis", ())),
+                        int(case.get("increments", -1)),
+                    )
+                    if identity not in case_identities:
+                        case_identities.add(identity)
+                        all_cases.append(case)
+    case_checks = []
+    for index, case in enumerate(all_cases):
+        usable_counts = case.get("applicability_counts", {})
+        only_in_domain = (
+            isinstance(usable_counts, Mapping)
+            and int(usable_counts.get("in_domain", 0)) > 0
+            and sum(int(value) for value in usable_counts.values())
+            == int(usable_counts.get("in_domain", 0))
+        )
+        case_checks.extend(
+            (
+                _equal(f"case.{index}.status", case.get("status"), "completed"),
+                _equal(f"case.{index}.converged", case.get("converged"), True),
+                _equal(f"case.{index}.in_domain", only_in_domain, True),
+            )
+        )
+    checks = [
+        _equal("record.schema", record.get("schema"), gate["schema"]),
+        _equal(
+            "problem_identity",
+            record.get("problem_identity"),
+            gate["problem_identity"],
+        ),
+        _equal(
+            "execution.unique_case_count",
+            _path(record, "execution_policy", "unique_case_count"),
+            5,
+        ),
+        _equal("execution.observed_unique_case_count", len(all_cases), 5),
+        *case_checks,
+        _bounded(
+            "mesh.reaction_last_two_relative_change",
+            _path(record, "convergence", "mesh_reaction_last_two_relative_change"),
+            upper=float(gate["maximum_mesh_reaction_relative_change"]),
+        ),
+        _bounded(
+            "increment.reaction_last_two_relative_change",
+            _path(
+                record,
+                "convergence",
+                "increment_reaction_last_two_relative_change",
+            ),
+            upper=float(gate["maximum_increment_reaction_relative_change"]),
+        ),
+        _bounded(
+            "increment.peeq_last_two_relative_change",
+            _path(record, "convergence", "increment_peeq_last_two_relative_change"),
+            upper=float(gate["maximum_increment_peeq_relative_change"]),
+        ),
+        *_identity_checks(runtime if isinstance(runtime, Mapping) else {}, contract),
+    ]
+    return AcceptanceReport(
+        "denim_v1_structural_mesh_increment_convergence_gate",
+        tuple(checks),
+        contract["maturity"],
+    )
+
+
 def verify_published_evidence(
     source: str | Path,
     contract: Mapping[str, object] | None = None,
@@ -310,9 +498,7 @@ def verify_published_evidence(
             "structure.mild_cyclic.reaction_relative_l2",
             _path(record, "structure", "mild_cyclic", "reaction_relative_l2"),
             {
-                "reference": expected["metrics"][
-                    "mild_cyclic_reaction_relative_l2"
-                ],
+                "reference": expected["metrics"]["mild_cyclic_reaction_relative_l2"],
                 "absolute_tolerance": 1e-15,
             },
         ),
@@ -320,9 +506,7 @@ def verify_published_evidence(
             "structure.severe_monotonic.reaction_relative_l2",
             _path(record, "structure", "severe_monotonic", "reaction_relative_l2"),
             {
-                "reference": expected["metrics"][
-                    "severe_monotonic_reaction_relative_l2"
-                ],
+                "reference": expected["metrics"]["severe_monotonic_reaction_relative_l2"],
                 "absolute_tolerance": 1e-15,
             },
         ),

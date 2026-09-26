@@ -110,6 +110,16 @@ displacement through AgentFEM's ordinary global Newton, quadrature-state and
 result lifecycle. Both records are evaluated by the acceptance contract that
 ships in the wheel.
 
+The next two gates now add information that a fixed Golden cannot provide. A
+non-proportional isochoric tension-torsion circle is evaluated at nested
+increment resolutions and after a rigid rotation. Its public Abaqus source is
+used only for the path topology because that page describes a different
+material calibration. A three-dimensional plastic cantilever then checks
+reaction convergence across quadratic mesh refinement and load-increment
+refinement. Five unique cases cover the two axes through one shared reference
+case. Peak PEEQ near the clamp is retained as a diagnostic, not used as the
+mesh acceptance quantity.
+
 Published comparison evidence is authenticated separately. It records
 material-path and structural-reaction errors together with the exact scope of
 the reference comparison. This separation is deliberate:
@@ -125,9 +135,20 @@ or every material represented by DENIM to be validated. See the
 [material-memory laboratory](material_memory_and_denim_lab.md) for a
 beginner-readable explanation.
 
+## Calibration evidence
+
+`learned_constitutive.calibration` defines the promotion contract for a real
+material: stable source and reuse terms, raw-data SHA-256, immutable model
+identity, explicit units, disjoint fitting/validation/held-out sample IDs, and
+accepted blind metrics. The example template deliberately has
+`status: not_established`; changing the label cannot make it pass while data,
+partitions or metrics remain placeholders. This is the remaining scientific
+gate for DENIM v1, not a missing solver feature.
+
 ## References
 
 - [AgentFEM-DENIM fixed model revision](https://huggingface.co/HaomingLuo/AgentFEM-DENIM/tree/5629df0a23a3d1ed43e9de2150e3d33cb979fdc1)
 - [AgentFEM material-loading-memory fixed dataset revision](https://huggingface.co/datasets/HaomingLuo/AgentFEM-Material-Loading-Memory/tree/c84f416e5a71daa157e406c50afc3fc73509b9ca)
+- [Abaqus simple proportional and non-proportional cyclic tests](https://docs.software.vt.edu/abaqusv2025/English/SIMACAEBMKRefMap/simabmk-c-cyclictests.htm)
 - [PyTorch function transforms and Jacobians](https://docs.pytorch.org/docs/stable/func.api.html)
 - [Safetensors format](https://huggingface.co/docs/safetensors/)

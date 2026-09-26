@@ -49,6 +49,27 @@
     "minimum_maximum_peeq": 1e-8,
     "required_applicability_status": "in_domain"
   },
+  "nonproportional_path_gate": {
+    "schema": "agentfem-learning.denim-nonproportional-validation.v1",
+    "path_identity": "abaqus-inspired-tension-torsion-circle@1",
+    "refinement_factors": [1, 2, 4],
+    "minimum_final_peeq": 1e-8,
+    "maximum_peeq_decrease": 1e-12,
+    "maximum_refined_stress_relative_l2": 0.03,
+    "maximum_refined_peeq_relative_l2": 0.06,
+    "maximum_rotation_relative_l2": 1e-8,
+    "maximum_yield_residual_pa": 100.0,
+    "maximum_plastic_strain_trace": 1e-10,
+    "scientific_scope": "Fixed synthetic small-strain DENIM parameters on an independently published non-proportional path topology; not an OFHC copper calibration."
+  },
+  "structural_convergence_gate": {
+    "schema": "agentfem-learning.denim-structural-convergence.v1",
+    "problem_identity": "denim-v1-displacement-cantilever@1",
+    "maximum_mesh_reaction_relative_change": 0.05,
+    "maximum_increment_reaction_relative_change": 0.02,
+    "maximum_increment_peeq_relative_change": 0.05,
+    "peak_peeq_policy": "reported_but_not_used_for_mesh_acceptance_due_to_clamp_singularity"
+  },
   "published_scientific_evidence": {
     "source_repository": "HaomingLuo/AgentFEM-DENIM",
     "source_revision": "5629df0a23a3d1ed43e9de2150e3d33cb979fdc1",

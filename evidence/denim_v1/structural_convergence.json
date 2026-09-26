@@ -1,0 +1,95 @@
+{
+  "schema": "agentfem-learning.denim-structural-convergence.v1",
+  "problem_identity": "denim-v1-displacement-cantilever@1",
+  "loading": {
+    "beam_dimensions": [4.0, 1.0, 1.0],
+    "prescribed_end_displacement_y": -0.04,
+    "boundary_semantics": "left_face_clamped_right_face_y_displacement",
+    "displacement_space": "continuous_lagrange_degree_2"
+  },
+  "axes": {
+    "mesh": [
+      {
+        "cells_per_axis": [4, 1, 1],
+        "increments": 16,
+        "status": "completed",
+        "converged": true,
+        "reaction_y": -25343737.929814704,
+        "maximum_peeq": 0.0010787667290614563,
+        "applicability_counts": {"in_domain": 96}
+      },
+      {
+        "cells_per_axis": [8, 2, 2],
+        "increments": 16,
+        "status": "completed",
+        "converged": true,
+        "reaction_y": -22679218.016272,
+        "maximum_peeq": 0.0019684755214187974,
+        "applicability_counts": {"in_domain": 768}
+      },
+      {
+        "cells_per_axis": [12, 3, 3],
+        "increments": 16,
+        "status": "completed",
+        "converged": true,
+        "reaction_y": -22540580.550803497,
+        "maximum_peeq": 0.002227591911294126,
+        "applicability_counts": {"in_domain": 2592}
+      }
+    ],
+    "increment": [
+      {
+        "cells_per_axis": [12, 3, 3],
+        "increments": 4,
+        "status": "completed",
+        "converged": true,
+        "reaction_y": -22520081.83150388,
+        "maximum_peeq": 0.002244214027751601,
+        "applicability_counts": {"in_domain": 2592}
+      },
+      {
+        "cells_per_axis": [12, 3, 3],
+        "increments": 8,
+        "status": "completed",
+        "converged": true,
+        "reaction_y": -22533271.604607064,
+        "maximum_peeq": 0.0022329015415307922,
+        "applicability_counts": {"in_domain": 2592}
+      },
+      {
+        "cells_per_axis": [12, 3, 3],
+        "increments": 16,
+        "status": "completed",
+        "converged": true,
+        "reaction_y": -22540580.550803497,
+        "maximum_peeq": 0.002227591911294126,
+        "applicability_counts": {"in_domain": 2592}
+      }
+    ]
+  },
+  "convergence": {
+    "mesh_reaction_last_two_relative_change": 0.006150572082916541,
+    "mesh_peeq_last_two_relative_change": 0.11632130129472144,
+    "increment_reaction_last_two_relative_change": 0.0003242572293095892,
+    "increment_peeq_last_two_relative_change": 0.002383574033352371
+  },
+  "runtime": {
+    "model_name": "denim-expanded",
+    "model_version": "1.1.0",
+    "model_revision": "5629df0a23a3d1ed43e9de2150e3d33cb979fdc1",
+    "source_checkpoint_sha256": "db9b7ee5425f50ef6fdbefb04757bd13797769da7ca022a0b4ad83033b304888",
+    "weights_sha256": "2ed35af21f3c11d6f2237485871ac39d63b084eeb47b6c341175ab6ccb0f960a",
+    "dataset_id": "HaomingLuo/AgentFEM-Material-Loading-Memory",
+    "dataset_revision": "c84f416e5a71daa157e406c50afc3fc73509b9ca",
+    "dtype": "float64",
+    "offline_runtime": true
+  },
+  "execution_policy": {
+    "unique_case_count": 5,
+    "full_cartesian_product": false,
+    "shared_reference_case": {
+      "cells_per_axis": [12, 3, 3],
+      "increments": 16
+    }
+  }
+}
