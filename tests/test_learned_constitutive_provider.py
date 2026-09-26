@@ -27,7 +27,10 @@ from agentfem_learning.learned_constitutive.artifacts import (
     load_model_bundle,
 )
 from agentfem_learning.learned_constitutive.denim import DENIM, state_schema
-from agentfem_learning.learned_constitutive.denim.export import denim_manifest
+from agentfem_learning.learned_constitutive.denim.export import (
+    convert_legacy_checkpoint,
+    denim_manifest,
+)
 from agentfem_learning.learned_constitutive.denim.loader import load_denim_v1
 from agentfem_learning.learned_constitutive.provider import TorchConstitutiveProvider
 from agentfem_learning.learned_constitutive.registry import (
@@ -150,6 +153,29 @@ def test_bundle_schema_and_nested_manifest_are_immutable(tmp_path):
     assert bundle.summary()["schema_version"] == "1.0.0"
     with pytest.raises(TypeError):
         bundle.manifest["architecture"]["channels"] = 7
+
+
+def test_legacy_migration_authenticates_source_checkpoint(tmp_path):
+    checkpoint = tmp_path / "trusted.pt"
+    torch.save(DENIM(channels=2).double().state_dict(), checkpoint)
+    with pytest.raises(ValueError, match="checkpoint checksum mismatch"):
+        convert_legacy_checkpoint(
+            checkpoint,
+            tmp_path / "rejected",
+            channels=2,
+            expected_checkpoint_sha256="0" * 64,
+        )
+    expected = file_sha256(checkpoint)
+    root = convert_legacy_checkpoint(
+        checkpoint,
+        tmp_path / "accepted",
+        channels=2,
+        model_revision="fixed-test-revision",
+        expected_checkpoint_sha256=expected,
+    )
+    bundle = load_model_bundle(root)
+    assert bundle.summary()["source_checkpoint_sha256"] == expected
+    assert bundle.summary()["model_revision"] == "fixed-test-revision"
 
 
 def test_missing_architecture_has_stable_error_code():

@@ -16,4 +16,5 @@ dependencies:
       - neuraloperator>=2,<3
       - pytest>=8
       - ruff>=0.16,<0.17
+      - safetensors>=0.4,<1
       - twine

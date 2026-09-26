@@ -1,0 +1,72 @@
+{
+  "schema": "agentfem-learning.denim-acceptance.v1",
+  "maturity": {
+    "software_integration": "verified",
+    "scientific_model": "supported_with_declared_scope",
+    "statement": "Passing this contract verifies the fixed DENIM software path. It does not validate every material, loading path, mesh, or structure."
+  },
+  "identity": {
+    "model_repository": "HaomingLuo/AgentFEM-DENIM",
+    "model_revision": "5629df0a23a3d1ed43e9de2150e3d33cb979fdc1",
+    "model_name": "denim-expanded",
+    "model_version": "1.1.0",
+    "legacy_checkpoint": "denim-expanded.pt",
+    "legacy_checkpoint_sha256": "db9b7ee5425f50ef6fdbefb04757bd13797769da7ca022a0b4ad83033b304888",
+    "runtime_weights_sha256": "2ed35af21f3c11d6f2237485871ac39d63b084eeb47b6c341175ab6ccb0f960a",
+    "dataset_repository": "HaomingLuo/AgentFEM-Material-Loading-Memory",
+    "dataset_revision": "c84f416e5a71daa157e406c50afc3fc73509b9ca"
+  },
+  "material_point_golden": {
+    "schema": "agentfem-learning.denim-material-point.v1",
+    "loading_path_identity": "denim-v1-cyclic-deviatoric@1",
+    "steps": 121,
+    "maximum_absolute_stress_mpa": {
+      "reference": 292.54713784451934,
+      "absolute_tolerance": 0.001,
+      "relative_tolerance": 1e-7
+    },
+    "final_peeq": {
+      "reference": 0.009527088265532677,
+      "absolute_tolerance": 1e-10,
+      "relative_tolerance": 1e-7
+    },
+    "maximum_yield_residual_pa": {
+      "upper_bound": 50.0
+    }
+  },
+  "global_bar_golden": {
+    "schema": "agentfem-learning.denim-global-bar.v1",
+    "problem_identity": "denim-v1-symmetry-bar@1",
+    "mesh": "unit-cube-2x1x1-tetrahedra",
+    "boundary_semantics": "x tension with y=0 and z=0 symmetry planes",
+    "target_displacement": 0.004,
+    "increments": 4,
+    "maximum_absolute_stress_pa": {
+      "reference": 374511492.0858711,
+      "absolute_tolerance": 50.0,
+      "relative_tolerance": 1e-7
+    },
+    "minimum_maximum_peeq": 1e-8,
+    "required_applicability_status": "in_domain"
+  },
+  "published_scientific_evidence": {
+    "source_repository": "HaomingLuo/AgentFEM-DENIM",
+    "source_revision": "5629df0a23a3d1ed43e9de2150e3d33cb979fdc1",
+    "source_path": "artifacts/deployment_validation.json",
+    "source_sha256": "f04ca496825ec0c84c11cc284d640aa0e195a21c89cd262065ddaddb9fedd2dc",
+    "scope": "reference has three memories and tabulated hardening; deployed DENRM has two memories and no access to the reference equations",
+    "metrics": {
+      "material_path_121_rmse_mpa": 0.9438070587644558,
+      "material_path_481_rmse_mpa": 0.9584221120986024,
+      "terminal_121_to_481_relative_change": 0.010678476861357365,
+      "mild_cyclic_reaction_relative_l2": 0.0063571165780202015,
+      "severe_monotonic_reaction_relative_l2": 0.004998587374687885,
+      "severe_cyclic_stress_test_passed": true
+    },
+    "limitations": [
+      "Evidence uses synthetic small-strain histories rather than a named experimental alloy calibration.",
+      "It does not cover temperature, creep, fatigue, cracks, finite strain, or arbitrary out-of-distribution histories.",
+      "The published structural comparison is supporting evidence, not general three-dimensional AgentFEM validation."
+    ]
+  }
+}

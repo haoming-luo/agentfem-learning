@@ -1,0 +1,82 @@
+name: DENIM fixed-asset acceptance
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fixed-denim-v1:
+    runs-on: ubuntu-latest
+    env:
+      UCX_TLS: tcp,sm,self
+      MODEL_REVISION: 5629df0a23a3d1ed43e9de2150e3d33cb979fdc1
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - name: Check out AgentFEM-Learning
+        uses: actions/checkout@v6
+
+      - name: Create the scientific runtime
+        uses: conda-incubator/setup-miniconda@v4
+        with:
+          activate-environment: agentfem-learning-dev
+          environment-file: environment.yml
+          miniforge-version: latest
+          use-mamba: true
+          channels: conda-forge
+          channel-priority: strict
+
+      - name: Build and install immutable wheels
+        run: |
+          git clone --depth 1 https://github.com/haoming-luo/agentfem.git ../agentfem
+          python -m build --wheel --outdir /tmp/core-dist ../agentfem
+          python -m build --wheel --outdir /tmp/learning-dist .
+          python -m pip install --no-deps --force-reinstall /tmp/core-dist/*.whl
+          python -m pip install --no-deps --force-reinstall /tmp/learning-dist/*.whl
+          python -m pip check
+
+      - name: Download and authenticate the fixed public checkpoint
+        run: |
+          mkdir -p /tmp/denim-source /tmp/denim-bundle /tmp/denim-results
+          curl --fail --location --retry 3 \
+            "https://huggingface.co/HaomingLuo/AgentFEM-DENIM/resolve/${MODEL_REVISION}/denim-expanded.pt?download=true" \
+            --output /tmp/denim-source/denim-expanded.pt
+          python examples/learned_constitutive_denim/prepare_bundle.py \
+            /tmp/denim-source/denim-expanded.pt /tmp/denim-bundle
+
+      - name: Run serial material-point and plastic-structure Goldens
+        run: |
+          cd /tmp
+          python "$GITHUB_WORKSPACE/examples/learned_constitutive_denim/case.py" \
+            --bundle /tmp/denim-bundle \
+            --output /tmp/denim-results/material-point.json
+          python "$GITHUB_WORKSPACE/examples/learned_constitutive_denim/global_bar.py" \
+            --bundle /tmp/denim-bundle \
+            --output /tmp/denim-results/global-bar-serial.json
+
+      - name: Run two-rank plastic-structure Golden
+        run: |
+          cd /tmp
+          mpiexec -n 2 python \
+            "$GITHUB_WORKSPACE/examples/learned_constitutive_denim/global_bar.py" \
+            --bundle /tmp/denim-bundle \
+            --output /tmp/denim-results/global-bar-mpi2.json
+
+      - name: Verify software Goldens and the separate published receipt
+        run: |
+          python examples/learned_constitutive_denim/verify_acceptance.py \
+            --material-point /tmp/denim-results/material-point.json \
+            --global-bar /tmp/denim-results/global-bar-mpi2.json \
+            --published-evidence evidence/denim_v1/published_deployment_validation.json \
+            --output /tmp/denim-results/acceptance.json
+
+      - name: Upload bounded acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: denim-v1-acceptance
+          path: /tmp/denim-results/*.json
+          if-no-files-found: error

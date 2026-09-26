@@ -66,18 +66,23 @@ class ModelBundle:
         return str(self.manifest["model_version"])
 
     def summary(self) -> dict[str, object]:
+        training_metadata = self.manifest.get("training_metadata", {})
         return {
             "kind": "learned_constitutive_model_bundle",
             "schema": self.manifest["schema"],
             "schema_version": self.manifest["schema_version"],
             "model_name": self.model_name,
             "model_version": self.model_version,
+            "model_revision": self.manifest.get("model_revision"),
             "architecture_id": self.architecture_id,
             "manifest_sha256": self.manifest_sha256,
             "weights_sha256": self.weights_sha256,
             "weights_format": self.manifest["weights_format"],
             "dataset_id": self.manifest.get("dataset_id"),
             "dataset_revision": self.manifest.get("dataset_revision"),
+            "source_checkpoint_sha256": training_metadata.get(
+                "source_checkpoint_sha256"
+            ),
         }
 
     as_dict = summary

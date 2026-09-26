@@ -26,6 +26,7 @@ def denim_manifest(
     model_revision: str | None = None,
     dataset_id: str | None = None,
     dataset_revision: str | None = None,
+    source_checkpoint_sha256: str | None = None,
 ) -> dict[str, object]:
     return {
         "schema": MODEL_BUNDLE_SCHEMA,
@@ -99,6 +100,7 @@ def denim_manifest(
         "weights_sha256": weights_sha256,
         "training_metadata": {
             "legacy_checkpoint_migrated": True,
+            "source_checkpoint_sha256": source_checkpoint_sha256,
             "parameter_count": None,
         },
     }
@@ -114,6 +116,7 @@ def convert_legacy_checkpoint(
     model_revision: str | None = None,
     dataset_id: str | None = None,
     dataset_revision: str | None = None,
+    expected_checkpoint_sha256: str | None = None,
 ) -> Path:
     """Migrate one trusted state-dict checkpoint; never used during a solve."""
 
@@ -128,6 +131,15 @@ def convert_legacy_checkpoint(
     target = Path(destination).expanduser().resolve()
     if not source.is_file():
         raise FileNotFoundError(source)
+    source_digest = file_sha256(source)
+    if (
+        expected_checkpoint_sha256 is not None
+        and source_digest != expected_checkpoint_sha256.lower().removeprefix("sha256:")
+    ):
+        raise ValueError(
+            "Legacy checkpoint checksum mismatch: expected "
+            f"{expected_checkpoint_sha256}, found {source_digest}."
+        )
     target.mkdir(parents=True, exist_ok=True)
     payload = torch.load(source, map_location="cpu", weights_only=True)
     state = payload.get("state_dict", payload)
@@ -151,6 +163,7 @@ def convert_legacy_checkpoint(
         model_revision=model_revision,
         dataset_id=dataset_id,
         dataset_revision=dataset_revision,
+        source_checkpoint_sha256=source_digest,
     )
     manifest["training_metadata"]["parameter_count"] = sum(
         value.numel() for value in tensors.values()
@@ -163,6 +176,7 @@ def convert_legacy_checkpoint(
         f"- Architecture: `denim.v1`\n"
         f"- Model version: `{model_version}`\n"
         f"- Model revision: `{model_revision or 'unspecified'}`\n"
+        f"- Source checkpoint SHA-256: `{source_digest}`\n"
         f"- Dataset: `{dataset_id or 'unspecified'}`\n"
         f"- Dataset revision: `{dataset_revision or 'unspecified'}`\n"
         f"- Memory channels: `{channels}`\n"

@@ -130,6 +130,31 @@ core `model.step(target=spec, executor=...)` boundary.
 - Do not route neural operators through `NeuralFieldSpec`: a function-to-
   function map and a per-problem optimized field are different contracts.
 
+### Learned constitutive models
+
+- **Provider-neutral integration implemented:** AgentFEM owns small-strain
+  material semantics, batched quadrature state, global Newton, increment
+  rollback, portable restart, MPI and `SimulationResult`. This companion owns
+  the optional PyTorch runtime and registered architectures.
+- **DENIM v1 software acceptance implemented:** a fixed model revision,
+  checkpoint checksum, dataset revision, 121-step material path and plastic
+  three-dimensional symmetry bar form two fail-closed Goldens. The model is
+  prepared explicitly and the solve remains offline.
+- **Scientific evidence boundary implemented:** the published material-path
+  and structural comparison receipt is authenticated separately with its
+  source hash, scope and limitations. A software pass does not silently
+  promote scientific maturity.
+- **Cost-bounded clean-host acceptance implemented:** fixed public assets are
+  re-downloaded, authenticated, converted and exercised from installed wheels
+  in serial and two-rank MPI only when the dedicated workflow is explicitly
+  dispatched. Ordinary documentation and unrelated provider changes do not
+  trigger this heavier gate.
+- **Next gate:** add an independently reproducible non-proportional path and a
+  mesh/increment convergence study for a plastic structure, then establish an
+  experimental or independently published material calibration. Only after
+  those gates should temperature, strain-rate, finite-strain, or additional
+  learned architectures broaden the public capability claim.
+
 ## Promotion rule
 
 A provider moves from `experimental_reference` only after it has a readable

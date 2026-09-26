@@ -59,7 +59,19 @@ The published fixed identities used for acceptance are:
 - dataset: `HaomingLuo/AgentFEM-Material-Loading-Memory` at
   `c84f416e5a71daa157e406c50afc3fc73509b9ca`.
 
-Prepare those files explicitly, then migrate the trusted legacy state dict:
+Prepare those files explicitly, then authenticate and migrate the trusted
+legacy state dict:
+
+```bash
+hf download HaomingLuo/AgentFEM-DENIM denim-expanded.pt \
+  --revision 5629df0a23a3d1ed43e9de2150e3d33cb979fdc1 \
+  --local-dir prepared
+python examples/learned_constitutive_denim/prepare_bundle.py \
+  prepared/denim-expanded.pt models/denim-expanded
+```
+
+The preparation command rejects any checkpoint whose SHA-256 differs from the
+published fixed asset. The equivalent low-level Python API is:
 
 ```python
 from agentfem_learning.learned_constitutive.denim import convert_legacy_checkpoint
@@ -71,6 +83,7 @@ convert_legacy_checkpoint(
     model_revision="5629df0a23a3d1ed43e9de2150e3d33cb979fdc1",
     dataset_id="HaomingLuo/AgentFEM-Material-Loading-Memory",
     dataset_revision="c84f416e5a71daa157e406c50afc3fc73509b9ca",
+    expected_checkpoint_sha256="db9b7ee5425f50ef6fdbefb04757bd13797769da7ca022a0b4ad83033b304888",
 )
 ```
 
@@ -90,16 +103,27 @@ checkpoint.
   finite-state, and applicability diagnostics;
 - no network access and no silent high-fidelity fallback.
 
-The fixed 121-step reference path after bundle migration gives approximately
-`292.547 MPa` maximum absolute stress and `0.00952709` final PEEQ. These values
-are a software regression, not a declaration that every finite-element result
-using the model is validated.
+The fixed 121-step reference path gives approximately `292.547 MPa` maximum
+absolute stress and `0.00952709` final PEEQ. The fixed three-dimensional
+symmetry-bar regression reaches plastic flow under `0.004` prescribed axial
+displacement through AgentFEM's ordinary global Newton, quadrature-state and
+result lifecycle. Both records are evaluated by the acceptance contract that
+ships in the wheel.
 
-The current acceptance boundary is the framework-neutral material-point and
-rank-local batch contract. Promotion to an implicit finite-element capability
-requires a core AgentFEM Step provider, installed-wheel structural regression,
-and serial/two-rank agreement; the companion does not infer that capability
-from a passing tangent check alone.
+Published comparison evidence is authenticated separately. It records
+material-path and structural-reaction errors together with the exact scope of
+the reference comparison. This separation is deliberate:
+
+```text
+fixed software Golden       -> is this exact integration still reproducible?
+published scientific receipt -> what comparison evidence currently exists?
+declared limitations         -> what has not been established?
+```
+
+Passing the first two questions does not declare every finite-element result
+or every material represented by DENIM to be validated. See the
+[material-memory laboratory](material_memory_and_denim_lab.md) for a
+beginner-readable explanation.
 
 ## References
 
