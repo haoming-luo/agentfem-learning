@@ -1,0 +1,73 @@
+{
+  "schema": "agentfem-learning.experimental-denim-baseline.v1",
+  "status": "baseline_rejected",
+  "promotion_status": "not_established",
+  "promotion_reason": "One independently published pilot coupon is not a disjoint fit, validation and held-out experimental calibration.",
+  "source": {
+    "identifier": "doi:10.5281/zenodo.6965147",
+    "license": "CC-BY-4.0",
+    "sample_id": "S355J2+M-HEM320-flange-LP8-S1",
+    "material": "S355J2+M",
+    "product": "HEM320 flange",
+    "load_protocol": "LP8",
+    "repository": "https://github.com/ahartloper/rlmtp",
+    "revision": "6ad0092094d0de3d00cb573bbb8ff22d2fb338a7",
+    "path": "Examples/HEM320C-LP8_Specimen_1_processed_data.csv",
+    "git_blob_sha": "3ee1d5db5ed8501a8701b07d39f4a83d03623ab4",
+    "file_sha256": "db0cfeddfa2dd2ba9f1aee65a68163934bf213b8d16f59634d87df6f1ad40498",
+    "original_point_count": 8434,
+    "zero_origin_offsets": {
+      "strain": 4.503430364275091e-06,
+      "stress_pa": 513109.220518116
+    }
+  },
+  "processing": {
+    "maximum_absolute_strain": 0.025,
+    "bounded_point_count": 7248,
+    "path_reduction": "normalized_strain_stress_rdp",
+    "reduced_point_count": 121,
+    "compared_prefix_point_count": 68,
+    "raw_or_reduced_curves_embedded": false
+  },
+  "model": {
+    "repository": "HaomingLuo/AgentFEM-DENIM",
+    "revision": "5629df0a23a3d1ed43e9de2150e3d33cb979fdc1",
+    "source_checkpoint_sha256": "db9b7ee5425f50ef6fdbefb04757bd13797769da7ca022a0b4ad83033b304888",
+    "bundle_weights_sha256": "2ed35af21f3c11d6f2237485871ac39d63b084eeb47b6c341175ab6ccb0f960a",
+    "architecture": "denim.v1",
+    "parameters": {
+      "young_pa": 190000000000.0,
+      "poisson": 0.3,
+      "yield_stress_pa": 280000000.0
+    },
+    "training_dataset": "HaomingLuo/AgentFEM-Material-Loading-Memory",
+    "training_dataset_revision": "c84f416e5a71daa157e406c50afc3fc73509b9ca"
+  },
+  "control": {
+    "kind": "axial_strain_with_zero_transverse_and_shear_stress",
+    "maximum_stress_control_residual_pa": 0.3735732138156891,
+    "completed": false,
+    "failure": {
+      "kind": "material_applicability",
+      "step_index": 68,
+      "coordinate_s": 172.799999999999,
+      "state_commit": "failed_trial_not_committed"
+    }
+  },
+  "metrics_on_accepted_prefix": {
+    "stress_rmse_pa": 207853787.68503222,
+    "stress_mae_pa": 160521981.6149544,
+    "stress_range_normalized_rmse": 0.24462180908046727,
+    "maximum_absolute_stress_error_pa": 385313760.633651,
+    "measured_signed_work_density_j_per_m3": 13113347.19927201,
+    "predicted_signed_work_density_j_per_m3": 12623281.812936772,
+    "signed_work_relative_error": 0.03737149477460986
+  },
+  "acceptance": {
+    "metric": "stress_range_normalized_rmse",
+    "value": 0.24462180908046727,
+    "maximum": 0.05,
+    "accepted": false
+  },
+  "interpretation": "The mixed-control runtime is numerically consistent, but the fixed synthetic DENIM v1 asset is not accepted as a calibrated model for this S355J2+M coupon. It also leaves its declared applicability domain before the reduced experiment ends."
+}

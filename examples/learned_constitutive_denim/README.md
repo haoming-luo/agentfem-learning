@@ -49,3 +49,9 @@ Use `verify_acceptance.py` to combine the software and convergence regressions
 with the separately authenticated published comparison receipt. See the
 [material-memory laboratory](../../docs/material_memory_and_denim_lab.md) for
 the concepts and exact commands.
+
+`experimental_baseline.py` is a separate real-data pilot. It verifies an
+immutable published CSV, applies true uniaxial mixed control, preserves an
+out-of-domain step as an uncommitted trial, and reports a compact comparison.
+The current fixed DENIM v1 asset is rejected on that S355J2+M coupon; this
+example establishes the calibration workflow, not calibration maturity.

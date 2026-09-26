@@ -90,6 +90,22 @@ python examples/learned_constitutive_denim/global_cantilever_convergence.py \
   --output outputs/denim-structural-convergence.json
 ```
 
+An independently published coupon can be checked without pretending it is
+training data:
+
+```bash
+python examples/learned_constitutive_denim/experimental_baseline.py \
+  --bundle models/denim-expanded \
+  --csv HEM320C-LP8_Specimen_1_processed_data.csv \
+  --maximum-points 121 \
+  --output outputs/denim-experimental-pilot.json
+```
+
+This coupon prescribes axial strain while the transverse and shear stresses
+remain zero. That is different from artificially locking all lateral strains.
+The command checks the source SHA-256 and writes bounded metrics by default;
+add `--include-curves` only for a local diagnostic file.
+
 Authenticate the separately published comparison receipt and combine all
 reports:
 
@@ -119,6 +135,9 @@ python examples/learned_constitutive_denim/verify_acceptance.py \
 - none of these checks proves experimental calibration for an arbitrary alloy
   or reliability under temperature, creep, fatigue, cracks, finite strain, or
   unseen long histories.
+- the external S355J2+M pilot is intentionally rejected: the stress-history
+  error is about 24.46% and the fixed asset exits its declared applicability
+  domain before the reduced test ends.
 
 That last distinction is part of the product: AgentFEM records what is known,
 what passed, and what remains unproven instead of turning one successful run

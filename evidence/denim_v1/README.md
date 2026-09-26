@@ -27,3 +27,17 @@ Two locally regenerated, fixed-asset receipts extend that evidence:
 The non-proportional source describes OFHC copper, whereas the fixed DENIM
 asset has different material parameters. The source is therefore used only
 for path topology. Neither receipt is presented as experimental calibration.
+
+`experimental_pilot.json` is the first comparison with an independently
+published laboratory coupon. It uses Hartloper et al.'s S355J2+M LP8 history,
+identified by DOI, repository revision, Git blob and file SHA-256. The local
+mixed-control solve reproduces the coupon boundary semantics to sub-pascal
+stress residual, but the fixed synthetic DENIM v1 asset fails the declared 5%
+stress-history threshold and leaves its applicability domain before completing
+the reduced experiment. The negative result is retained deliberately: DENIM
+v1 is **not** promoted as a calibrated S355J2+M material.
+
+The repository stores only bounded metrics and identities, not the third-party
+experimental curve. Users obtain the data from its published source under
+CC BY 4.0 and can regenerate the receipt with
+`examples/learned_constitutive_denim/experimental_baseline.py`.
