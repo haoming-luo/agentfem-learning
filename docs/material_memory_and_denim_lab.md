@@ -82,15 +82,23 @@ python examples/learned_constitutive_denim/case.py \
   --bundle models/denim-expanded --output outputs/denim-point.json
 python examples/learned_constitutive_denim/global_bar.py \
   --bundle models/denim-expanded --output outputs/denim-bar.json
+python examples/learned_constitutive_denim/nonproportional_path.py \
+  --bundle models/denim-expanded \
+  --output outputs/denim-nonproportional.json
+python examples/learned_constitutive_denim/global_cantilever_convergence.py \
+  --bundle models/denim-expanded \
+  --output outputs/denim-structural-convergence.json
 ```
 
 Authenticate the separately published comparison receipt and combine all
-three reports:
+reports:
 
 ```bash
 python examples/learned_constitutive_denim/verify_acceptance.py \
   --material-point outputs/denim-point.json \
   --global-bar outputs/denim-bar.json \
+  --nonproportional outputs/denim-nonproportional.json \
+  --structural-convergence outputs/denim-structural-convergence.json \
   --published-evidence evidence/denim_v1/published_deployment_validation.json \
   --output outputs/denim-acceptance.json
 ```
@@ -102,6 +110,10 @@ python examples/learned_constitutive_denim/verify_acceptance.py \
 - positive `maximum_peeq` in the bar proves that the global solve crossed into
   plastic flow.
 - `applicability_counts` must contain only `in_domain` points.
+- the non-proportional gate must retain exact path knots, converge under
+  refinement, and transform covariantly after a rigid rotation.
+- the structural gate checks converged reactions on both mesh and increment
+  axes; its clamp-sensitive maximum PEEQ remains a diagnostic.
 - the published receipt states comparison errors and its narrower reference
   scope.
 - none of these checks proves experimental calibration for an arbitrary alloy

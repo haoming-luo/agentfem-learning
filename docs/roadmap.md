@@ -149,11 +149,16 @@ core `model.step(target=spec, executor=...)` boundary.
   in serial and two-rank MPI only when the dedicated workflow is explicitly
   dispatched. Ordinary documentation and unrelated provider changes do not
   trigger this heavier gate.
-- **Next gate:** add an independently reproducible non-proportional path and a
-  mesh/increment convergence study for a plastic structure, then establish an
-  experimental or independently published material calibration. Only after
-  those gates should temperature, strain-rate, finite-strain, or additional
-  learned architectures broaden the public capability claim.
+- **Non-proportional and structural convergence gates implemented:** the fixed
+  model now passes a nested-resolution tension-torsion circle, exact rigid-
+  rotation covariance, and a quadratic three-dimensional plastic cantilever
+  with separate mesh and increment convergence axes. The path source defines
+  topology only and is not misrepresented as a copper calibration.
+- **Next gate:** establish an experimental or independently published material
+  calibration with immutable raw data, declared fitting/held-out partitions,
+  units and calibration objective. Only after that evidence should
+  temperature, strain-rate, finite-strain, or additional learned architectures
+  broaden the public capability claim.
 
 ## Promotion rule
 

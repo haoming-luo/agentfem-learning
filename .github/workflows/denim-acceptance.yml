@@ -47,7 +47,7 @@ jobs:
           python examples/learned_constitutive_denim/prepare_bundle.py \
             /tmp/denim-source/denim-expanded.pt /tmp/denim-bundle
 
-      - name: Run serial material-point and plastic-structure Goldens
+      - name: Run serial Goldens and convergence gates
         run: |
           cd /tmp
           python "$GITHUB_WORKSPACE/examples/learned_constitutive_denim/case.py" \
@@ -56,6 +56,12 @@ jobs:
           python "$GITHUB_WORKSPACE/examples/learned_constitutive_denim/global_bar.py" \
             --bundle /tmp/denim-bundle \
             --output /tmp/denim-results/global-bar-serial.json
+          python "$GITHUB_WORKSPACE/examples/learned_constitutive_denim/nonproportional_path.py" \
+            --bundle /tmp/denim-bundle \
+            --output /tmp/denim-results/nonproportional.json
+          python "$GITHUB_WORKSPACE/examples/learned_constitutive_denim/global_cantilever_convergence.py" \
+            --bundle /tmp/denim-bundle \
+            --output /tmp/denim-results/structural-convergence.json
 
       - name: Run two-rank plastic-structure Golden
         run: |
@@ -65,11 +71,13 @@ jobs:
             --bundle /tmp/denim-bundle \
             --output /tmp/denim-results/global-bar-mpi2.json
 
-      - name: Verify software Goldens and the separate published receipt
+      - name: Verify software, convergence, and published evidence
         run: |
           python examples/learned_constitutive_denim/verify_acceptance.py \
             --material-point /tmp/denim-results/material-point.json \
             --global-bar /tmp/denim-results/global-bar-mpi2.json \
+            --nonproportional /tmp/denim-results/nonproportional.json \
+            --structural-convergence /tmp/denim-results/structural-convergence.json \
             --published-evidence evidence/denim_v1/published_deployment_validation.json \
             --output /tmp/denim-results/acceptance.json
 

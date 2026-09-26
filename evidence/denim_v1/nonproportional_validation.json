@@ -1,0 +1,42 @@
+{
+  "schema": "agentfem-learning.denim-nonproportional-validation.v1",
+  "path": {
+    "identity": "abaqus-inspired-tension-torsion-circle@1",
+    "reference": "https://docs.software.vt.edu/abaqusv2025/English/SIMACAEBMKRefMap/simabmk-c-cyclictests.htm",
+    "reference_role": "path_topology_only_not_numerical_calibration",
+    "amplitude": 0.004,
+    "cycles": 1,
+    "base_segments_per_cycle": 16,
+    "base_fingerprint": "sha256:548a79f2cbe37a5169335d9dc55a1aa148272e21ec8df847e9ef9ca25e6f74bd",
+    "refinement_factors": [1, 2, 4],
+    "point_counts": [18, 35, 69]
+  },
+  "maximum_absolute_stress_mpa": 261.262336380934,
+  "final_peeq": 0.01982038934115468,
+  "minimum_peeq_increment": 0.0,
+  "refinement": {
+    "stress_relative_l2": 0.02718679269663386,
+    "peeq_relative_l2": 0.014885794049738287
+  },
+  "rotation_covariance": {
+    "stress_relative_l2": 0.0,
+    "peeq_relative_l2": 0.0
+  },
+  "physics": {
+    "maximum_yield_residual_pa": 0.6014589071273804,
+    "maximum_plastic_strain_trace": 0.0,
+    "all_refinements_usable": true,
+    "rotated_path_usable": true
+  },
+  "runtime": {
+    "model_name": "denim-expanded",
+    "model_version": "1.1.0",
+    "model_revision": "5629df0a23a3d1ed43e9de2150e3d33cb979fdc1",
+    "source_checkpoint_sha256": "db9b7ee5425f50ef6fdbefb04757bd13797769da7ca022a0b4ad83033b304888",
+    "weights_sha256": "2ed35af21f3c11d6f2237485871ac39d63b084eeb47b6c341175ab6ccb0f960a",
+    "dataset_id": "HaomingLuo/AgentFEM-Material-Loading-Memory",
+    "dataset_revision": "c84f416e5a71daa157e406c50afc3fc73509b9ca",
+    "dtype": "float64",
+    "offline_runtime": true
+  }
+}

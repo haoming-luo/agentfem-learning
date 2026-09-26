@@ -1,0 +1,39 @@
+{
+  "schema": "agentfem-learning.constitutive-calibration-evidence.v1",
+  "status": "not_established",
+  "calibration_scope": "Replace with the exact alloy, heat, temperature, rate and loading-path scope.",
+  "source": {
+    "kind": "published_experiment",
+    "identifier": "REPLACE_WITH_DOI_OR_STABLE_RECORD",
+    "license": "REPLACE_WITH_REUSE_TERMS",
+    "raw_data_sha256": "REPLACE_WITH_64_CHARACTER_SHA256"
+  },
+  "model": {
+    "architecture": "denim.v1",
+    "revision": "REPLACE_WITH_IMMUTABLE_MODEL_REVISION",
+    "weights_sha256": "REPLACE_WITH_64_CHARACTER_SHA256"
+  },
+  "calibration_objective": {
+    "name": "REPLACE_WITH_OBJECTIVE_NAME",
+    "loss": "REPLACE_WITH_EXACT_LOSS_DEFINITION",
+    "weighting": "REPLACE_WITH_SAMPLE_AND_QUANTITY_WEIGHTING"
+  },
+  "partitions": {
+    "fit": ["REPLACE_WITH_SAMPLE_IDS"],
+    "validation": ["REPLACE_WITH_DIFFERENT_SAMPLE_IDS"],
+    "held_out": ["REPLACE_WITH_BLIND_SAMPLE_IDS"]
+  },
+  "units": {
+    "strain": "1",
+    "stress": "Pa"
+  },
+  "held_out_metrics": [
+    {
+      "name": "stress_rmse_pa",
+      "value": null,
+      "maximum": null,
+      "unit": "Pa",
+      "sample_count": 0
+    }
+  ]
+}

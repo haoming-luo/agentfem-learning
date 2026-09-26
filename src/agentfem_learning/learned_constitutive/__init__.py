@@ -10,6 +10,12 @@ from .artifacts import (
     ModelBundleError,
     load_model_bundle,
 )
+from .calibration import (
+    CalibrationCheck,
+    CalibrationEvidenceReport,
+    evaluate_calibration_evidence,
+)
+from .history import LearnedMaterialHistory, run_small_strain_material_history
 from .provider import TORCH_CONSTITUTIVE_PROVIDER, TorchConstitutiveProvider
 from .registry import (
     ArchitectureRegistryError,
@@ -22,10 +28,15 @@ __all__ = [
     "MODEL_BUNDLE_SCHEMA_VERSION",
     "TORCH_CONSTITUTIVE_PROVIDER",
     "ArchitectureRegistryError",
+    "CalibrationCheck",
+    "CalibrationEvidenceReport",
+    "LearnedMaterialHistory",
     "ModelBundle",
     "ModelBundleError",
     "TorchConstitutiveProvider",
+    "evaluate_calibration_evidence",
     "load_model_bundle",
     "register_architecture",
     "registered_architectures",
+    "run_small_strain_material_history",
 ]

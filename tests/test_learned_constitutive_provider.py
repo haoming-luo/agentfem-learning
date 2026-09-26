@@ -15,6 +15,7 @@ from agentfem.constitutive import (
     SmallStrainMaterialPointBatchInput,
     SmallStrainMaterialPointInput,
     check_small_strain_material_tangent,
+    material_strain_path,
     small_strain_tangent_convention,
 )
 from agentfem.learning import LearnedConstitutiveSpec
@@ -32,6 +33,9 @@ from agentfem_learning.learned_constitutive.denim.export import (
     denim_manifest,
 )
 from agentfem_learning.learned_constitutive.denim.loader import load_denim_v1
+from agentfem_learning.learned_constitutive.history import (
+    run_small_strain_material_history,
+)
 from agentfem_learning.learned_constitutive.provider import TorchConstitutiveProvider
 from agentfem_learning.learned_constitutive.registry import (
     ArchitectureRegistryError,
@@ -308,6 +312,34 @@ def test_provider_caches_one_loaded_model(tmp_path):
     register_architecture("denim.v1", load_denim_v1, replace=True)
     provider = TorchConstitutiveProvider()
     assert provider.create(specification) is provider.create(specification)
+
+
+def test_provider_neutral_history_uses_named_state_and_exact_path(tmp_path):
+    specification = _spec(_bundle(tmp_path))
+    register_architecture("denim.v1", load_denim_v1, replace=True)
+    provider = TorchConstitutiveProvider()
+    learning.register_learned_constitutive_provider(
+        learning.LearnedConstitutiveProvider(
+            name=provider.name,
+            version="test",
+            factory=provider.create,
+            architectures=("denim.v1",),
+            capabilities=specification.capabilities,
+        ),
+        replace=True,
+    )
+    material = materials.learned(specification)
+    strain = np.zeros((3, 3, 3))
+    strain[1, 0, 0] = 1.0e-4
+    strain[1, 1, 1] = strain[1, 2, 2] = -0.5e-4
+    strain[2] = 2.0 * strain[1]
+    path = material_strain_path([0.0, 0.5, 1.0], strain, name="test_path")
+    response = run_small_strain_material_history(material, path)
+
+    assert response.accepted
+    assert response.stress.shape == (3, 3, 3)
+    assert response.state_variable("peeq").shape == (3,)
+    assert response.summary()["path"]["fingerprint"] == path.fingerprint
 
 
 def test_denim_provider_drives_global_implicit_step(tmp_path):
